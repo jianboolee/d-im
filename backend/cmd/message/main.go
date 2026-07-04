@@ -52,7 +52,7 @@ func main() {
 	// 4. 初始化
 	chatMgr := model.NewChatIDManager(db)
 	msgRepo := repository.NewMessageRepo(db)
-	msgSvc := service.NewMessageService(msgRepo, idGen, chatMgr)
+	msgSvc := service.NewMessageService(msgRepo, idGen, chatMgr, nil)
 
 	// 5. 启动分发器
 	d := dispatcher.NewDispatcher(msgRepo, 4)

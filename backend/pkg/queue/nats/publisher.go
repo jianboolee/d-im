@@ -45,6 +45,11 @@ func (p *Publisher) Close() {
 	p.conn.Close()
 }
 
+// GetConn 获取底层 NATS 连接（用于订阅）
+func (p *Publisher) GetConn() *nats.Conn {
+	return p.conn
+}
+
 // Publish 发布消息到指定主题
 func (p *Publisher) Publish(subject string, data []byte) error {
 	if p.conn == nil {

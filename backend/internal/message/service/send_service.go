@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"d-im/pkg/model"
@@ -18,7 +20,7 @@ type SendMessageReq struct {
 	MsgType    types.MessageType `json:"msg_type"`
 	Content    types.ContentType `json:"content"`
 	ClientTime time.Time         `json:"client_time"`
-	TargetUIDs []string          `json:"target_uids,omitempty"` // 接收者UID列表
+	TargetUIDs []string          `json:"target_uids,omitempty"`
 	QuoteMsgID string            `json:"quote_msg_id,omitempty"`
 }
 
@@ -29,18 +31,15 @@ type SendMessageResp struct {
 	Status     types.MessageStatus `json:"status"`
 }
 
-// Send 发送消息（完整链路：构建消息 → 存储 → 分发到信箱）
+// Send 发送消息（构建消息 → 存储 → 分发 → NATS 推送）
 func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMessageResp, error) {
-	// 1. 校验内容
 	if err := req.Content.Validate(); err != nil {
 		return nil, fmt.Errorf("content validation failed: %w", err)
 	}
 
-	// 2. 生成消息ID
 	msgID := s.GenerateMsgID()
 	now := time.Now()
 
-	// 3. 构建消息模型
 	msg := &model.Message{
 		MsgID:      msgID,
 		ChatID:     req.ChatID,
@@ -56,7 +55,6 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		UpdatedAt:  now,
 	}
 
-	// 4. 处理引用消息
 	if req.QuoteMsgID != "" {
 		msg.QuoteMsgID = req.QuoteMsgID
 		if quoted, err := s.repo.FindByMsgID(ctx, req.QuoteMsgID); err == nil {
@@ -70,14 +68,17 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		}
 	}
 
-	// 5. 存储消息
 	if err := s.repo.Insert(ctx, msg); err != nil {
 		return nil, fmt.Errorf("insert message: %w", err)
 	}
 
-	// 6. 分发到用户信箱
 	if len(req.TargetUIDs) > 0 {
 		s.distributeToMailbox(ctx, msg, req.TargetUIDs)
+	}
+
+	// 通过 NATS 发布推送事件，通知 connector
+	if s.natsPub != nil {
+		s.publishPushEvent(ctx, msg, req.TargetUIDs)
 	}
 
 	return &SendMessageResp{
@@ -87,7 +88,6 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	}, nil
 }
 
-// distributeToMailbox 将消息分发到目标用户的信箱
 func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Message, targetUIDs []string) {
 	mailboxes := make([]*model.UserMailbox, len(targetUIDs))
 	for i, uid := range targetUIDs {
@@ -99,11 +99,22 @@ func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Mes
 			Status: types.MessageStatusDelivered,
 		}
 	}
-	// 信箱写入失败不影响主流程，异步记录日志
 	_ = s.repo.BatchInsertToMailbox(ctx, mailboxes)
 }
 
-// getContentPreview 获取内容预览文本
+func (s *MessageService) publishPushEvent(ctx context.Context, msg *model.Message, targetUIDs []string) {
+	for _, uid := range targetUIDs {
+		payload, err := json.Marshal(msg)
+		if err != nil {
+			continue
+		}
+		subject := "im.push.message." + uid
+		if err := s.natsPub.Publish(subject, payload); err != nil {
+			log.Printf("[send_service] nats publish failed: subject=%s, err=%v", subject, err)
+		}
+	}
+}
+
 func getContentPreview(content interface{}) string {
 	switch c := content.(type) {
 	case types.TextContent:

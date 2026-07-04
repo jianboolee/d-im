@@ -19,6 +19,7 @@ import (
 	"d-im/pkg/crypto"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
+	natsq "d-im/pkg/queue/nats"
 	"d-im/pkg/snowflake"
 )
 
@@ -26,14 +27,14 @@ func main() {
 	configPath := flag.String("config", "configs/config.yaml", "config file path")
 	flag.Parse()
 
-	// 1. 加载配置
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
-	// 2. 初始化 MongoDB
 	ctx := context.Background()
+
+	// MongoDB
 	db, err := mongodb.NewClient(ctx, mongodb.Config{
 		URI:      cfg.MongoDB.URI,
 		Database: cfg.MongoDB.Database,
@@ -44,7 +45,7 @@ func main() {
 		log.Fatalf("mongodb: %v", err)
 	}
 
-	// 3. 初始化雪花ID
+	// 雪花ID
 	idGen, err := snowflake.NewGenerator(snowflake.Config{
 		WorkerID:     cfg.Snowflake.WorkerID,
 		DatacenterID: cfg.Snowflake.DatacenterID,
@@ -53,27 +54,32 @@ func main() {
 		log.Fatalf("snowflake: %v", err)
 	}
 
-	// 4. 初始化 JWT
-	accessExpire, err := time.ParseDuration(cfg.JWT.AccessExpire)
-	if err != nil {
-		log.Fatalf("jwt access_expire: %v", err)
-	}
-	refreshExpire, err := time.ParseDuration(cfg.JWT.RefreshExpire)
-	if err != nil {
-		log.Fatalf("jwt refresh_expire: %v", err)
-	}
-	ticketExpire, err := time.ParseDuration(cfg.JWT.TicketExpire)
-	if err != nil {
-		log.Fatalf("jwt ticket_expire: %v", err)
-	}
+	// JWT
+	accessExpire, _ := time.ParseDuration(cfg.JWT.AccessExpire)
+	refreshExpire, _ := time.ParseDuration(cfg.JWT.RefreshExpire)
+	ticketExpire, _ := time.ParseDuration(cfg.JWT.TicketExpire)
 	jwtMgr := crypto.NewJWTManager(cfg.JWT.Secret, accessExpire, refreshExpire, ticketExpire, cfg.JWT.APIKey)
 
-	// 5. 初始化各层依赖
+	// NATS
+	natsPub, err := natsq.NewPublisher(natsq.Config{
+		URL: cfg.NATS.URL,
+		Subjects: natsq.Subjects{
+			MessageSend:  cfg.NATS.Subjects.MessageSend,
+			MessagePush:  cfg.NATS.Subjects.MessagePush,
+			MessageEvent: cfg.NATS.Subjects.MessageEvent,
+		},
+	})
+	if err != nil {
+		log.Fatalf("nats: %v", err)
+	}
+	defer natsPub.Close()
+
+	// 依赖注入
 	chatMgr := model.NewChatIDManager(db)
 	msgRepo := repository.NewMessageRepo(db)
-	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr)
+	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, natsPub)
 
-	// 6. 初始化 HTTP
+	// HTTP
 	authHandler := handler.NewAuthHandler(jwtMgr)
 	messageHandler := handler.NewMessageHandler(msgSvc)
 	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler)
@@ -83,7 +89,6 @@ func main() {
 		GRPCPort: itoa(cfg.Server.Gateway.GRPCPort),
 	}, httpHandler)
 
-	// 7. 启动
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -95,7 +100,6 @@ func main() {
 
 	log.Printf("[api-gateway] started on :%d", cfg.Server.Gateway.HTTPPort)
 
-	// 8. 等待退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
