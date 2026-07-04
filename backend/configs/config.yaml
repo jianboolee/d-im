@@ -1,0 +1,48 @@
+app:
+  name: d-im
+  version: "1.0.0"
+  env: production
+
+server:
+  gateway:
+    http_port: 8080
+    grpc_port: 9080
+  connector:
+    ws_port: 8081
+    tcp_port: 8082
+
+mongodb:
+  uri: mongodb://mongo:27017
+  database: im_db
+  pool_size: 100
+  timeout: 10
+
+redis:
+  addr: redis:6379
+  password: ""
+  db: 0
+  pool_size: 100
+
+nats:
+  url: nats://nats:4222
+  subjects:
+    message_send: im.message.send
+    message_push: im.message.push
+    message_event: im.message.event
+    user_sync: im.user.sync
+
+snowflake:
+  worker_id: 1
+  datacenter_id: 1
+
+jwt:
+  secret: change-me-in-production
+  access_expire: 15m
+  refresh_expire: 168h
+  ticket_expire: 5m
+  api_key: change-me-in-production
+
+log:
+  level: info
+  format: json
+  output: stdout

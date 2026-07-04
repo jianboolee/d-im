@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "configs/config.dev.yaml", "config file path")
+	configPath := flag.String("config", "configs/config.yaml", "config file path")
 	flag.Parse()
 
 	// 1. 加载配置
