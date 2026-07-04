@@ -64,6 +64,14 @@ func main() {
 		count := server.GetManager().SendToUser(targetUID, msg.Data)
 		if count > 0 {
 			log.Printf("[connector] pushed to uid=%s, devices=%d", targetUID, count)
+		} else {
+			// 用户不在线，发布离线推送事件
+			offlineSubject := "im.push.offline." + targetUID
+			if err := natsPub.Publish(offlineSubject, msg.Data); err != nil {
+				log.Printf("[connector] offline push publish failed: uid=%s, err=%v", targetUID, err)
+			} else {
+				log.Printf("[connector] offline push published: uid=%s", targetUID)
+			}
 		}
 	})
 

@@ -1,4 +1,4 @@
-设计一个完整的 Push 服务架构，先用 Mock 实现，后续可以无缝切换到极光推送。
+好的，我来设计一个完整的 Push 服务架构，先用 Mock 实现，后续可以无缝切换到极光推送。
 
 ## 一、Push 服务的完整架构
 
@@ -1119,4 +1119,159 @@ func (h *PushHandler) GetMockStats(c *gin.Context) {
 
 // SwitchProvider 切换推送提供商
 // POST /api/v1/push/provider/switch
-func
+func (h *PushHandler) SwitchProvider(c *gin.Context) {
+    var req struct {
+        Provider string `json:"provider" binding:"required"` // mock/jpush
+    }
+    
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(400, gin.H{"code": -1, "msg": err.Error()})
+        return
+    }
+    
+    if err := h.factory.SetActive(req.Provider); err != nil {
+        c.JSON(400, gin.H{"code": -1, "msg": err.Error()})
+        return
+    }
+    
+    c.JSON(200, gin.H{
+        "code": 0,
+        "msg":  fmt.Sprintf("switched to %s", req.Provider),
+    })
+}
+```
+
+### 11. 配置文件
+
+```yaml
+# configs/config.yaml
+push:
+  # 当前使用的推送提供商: mock / jpush
+  provider: mock
+  
+  # Mock配置（开发测试用）
+  mock:
+    log_dir: /tmp/im_push_logs
+    failure_rate: 0.05          # 5%模拟失败率
+    latency_min: 10             # 最小延迟10ms
+    latency_max: 100            # 最大延迟100ms
+    store_records: true         # 存储推送记录
+  
+  # 极光推送配置（生产环境）
+  jpush:
+    app_key: "your_app_key"
+    master_secret: "your_master_secret"
+    apns_production: false      # 开发环境false，生产true
+    timeout: 30
+    retry_times: 3
+  
+  # 去重配置
+  dedup:
+    ttl: 600                    # 10分钟
+  
+  # 限流配置
+  throttle:
+    max_per_min: 10             # 每分钟最多10条
+```
+
+### 12. 主程序初始化
+
+```go
+// cmd/push/main.go
+package main
+
+func main() {
+    // 加载配置
+    cfg := loadConfig()
+    
+    // 创建Mock Provider
+    mockProvider, err := provider.NewMockPushProvider(provider.MockConfig{
+        LogDir:       cfg.Push.Mock.LogDir,
+        FailureRate:  cfg.Push.Mock.FailureRate,
+        LatencyMin:   cfg.Push.Mock.LatencyMin,
+        LatencyMax:   cfg.Push.Mock.LatencyMax,
+        StoreRecords: cfg.Push.Mock.StoreRecords,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // 创建Provider Factory
+    factory := provider.NewProviderFactory()
+    factory.Register(mockProvider)
+    
+    // 设置当前使用的Provider
+    factory.SetActive(cfg.Push.Provider)
+    
+    // 创建Push Service
+    pushService := service.NewPushService(
+        factory,
+        dedupService,
+        throttleService,
+        deviceRepo,
+    )
+    
+    // 后续接入极光推送时：
+    // jpushProvider, _ := provider.NewJPushProvider(provider.JPushConfig{...})
+    // factory.Register(jpushProvider)
+    // factory.SetActive("jpush")
+    
+    log.Printf("[Push] 推送服务启动，当前提供商: %s", cfg.Push.Provider)
+}
+```
+
+## 二、Mock Provider 的特点
+
+1. **完整的接口实现**：实现了 PushProvider 接口的所有方法
+2. **可配置的失败率**：模拟真实的推送失败场景
+3. **模拟延迟**：模拟网络延迟
+4. **推送记录**：记录所有推送请求，方便调试
+5. **日志输出**：详细的日志，方便追踪
+6. **统计信息**：推送成功/失败统计
+
+## 三、切换到极光推送的步骤
+
+```go
+// 只需三步：
+
+// 1. 安装极光推送SDK
+// go get github.com/jpush-go/jpush
+
+// 2. 修改配置文件
+push:
+  provider: jpush           # 改为jpush
+  jpush:
+    app_key: "你的AppKey"
+    master_secret: "你的MasterSecret"
+
+// 3. 在主程序中注册极光推送
+jpushProvider, _ := provider.NewJPushProvider(provider.JPushConfig{...})
+factory.Register(jpushProvider)
+factory.SetActive("jpush")
+```
+
+## 四、测试 Mock Push
+
+```bash
+# 1. 测试推送
+curl -X POST http://localhost:8080/api/v1/push/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_123",
+    "title": "新消息",
+    "body": "你有一条新消息",
+    "platform": "ios",
+    "push_token": "device_token_abc123"
+  }'
+
+# 2. 查看Mock推送记录
+curl http://localhost:8080/api/v1/push/mock/records
+
+# 3. 查看Mock统计
+curl http://localhost:8080/api/v1/push/mock/stats
+
+# 4. 查看Mock日志文件
+cat /tmp/im_push_logs/mock_push.log
+```
+
+这个设计让你现在就可以完整开发和测试推送功能，后续接入极光推送时只需要实现 PushProvider 接口即可，业务代码完全不需要修改。
