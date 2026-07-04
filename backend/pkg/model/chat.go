@@ -48,6 +48,11 @@ func GenerateSingleChatID(uid1, uid2 string) string {
 	return fmt.Sprintf("single_%s_%s", uids[0], uids[1])
 }
 
+// GenerateGroupChatID 生成群聊ID
+func (m *ChatIDManager) GenerateGroupChatID() string {
+	return fmt.Sprintf("group_%d", time.Now().UnixNano())
+}
+
 // CreateOrGetSingleChat 获取或创建单聊会话
 func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*Chat, error) {
 	chatID := GenerateSingleChatID(uid1, uid2)
@@ -74,4 +79,85 @@ func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 st
 		return nil, err
 	}
 	return &chat, nil
+}
+
+// CreateGroupChat 创建群聊
+func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerUID string, memberUIDs []string) (*Chat, error) {
+	chatID := m.GenerateGroupChatID()
+
+	allMembers := append([]string{ownerUID}, memberUIDs...)
+	allMembers = uniqueStrings(allMembers)
+
+	now := time.Now()
+	chat := &Chat{
+		ChatID:      chatID,
+		ChatType:    types.ChatTypeGroup,
+		Name:        name,
+		OwnerUID:    ownerUID,
+		Members:     allMembers,
+		MemberCount: len(allMembers),
+		CreatedBy:   ownerUID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	_, err := m.chatColl.InsertOne(ctx, chat)
+	return chat, err
+}
+
+// AddMember 添加群成员
+func (m *ChatIDManager) AddMember(ctx context.Context, chatID string, uid string) error {
+	filter := bson.M{"chat_id": chatID}
+	update := bson.M{
+		"$addToSet": bson.M{"members": uid},
+		"$inc":      bson.M{"member_count": 1},
+		"$set":      bson.M{"updated_at": time.Now()},
+	}
+	_, err := m.chatColl.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// RemoveMember 移除群成员
+func (m *ChatIDManager) RemoveMember(ctx context.Context, chatID string, uid string) error {
+	filter := bson.M{"chat_id": chatID}
+	update := bson.M{
+		"$pull": bson.M{"members": uid},
+		"$inc":  bson.M{"member_count": -1},
+		"$set":  bson.M{"updated_at": time.Now()},
+	}
+	_, err := m.chatColl.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// GetMembers 查询群成员列表
+func (m *ChatIDManager) GetMembers(ctx context.Context, chatID string) ([]string, error) {
+	var chat Chat
+	err := m.chatColl.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
+	if err != nil {
+		return nil, err
+	}
+	return chat.Members, nil
+}
+
+// FindByChatID 根据chatID查询Chat
+func (m *ChatIDManager) FindByChatID(ctx context.Context, chatID string) (*Chat, error) {
+	var chat Chat
+	err := m.chatColl.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
+	if err != nil {
+		return nil, err
+	}
+	return &chat, nil
+}
+
+// uniqueStrings 字符串切片去重
+func uniqueStrings(slice []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(slice))
+	for _, s := range slice {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }

@@ -1,10 +1,12 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 
+	"d-im/pkg/model"
 	"d-im/pkg/types"
 )
 
@@ -50,20 +52,39 @@ func (r *SingleRouter) Route(chatID string, fromUID string) (*RouteResult, error
 
 // GroupRouter 群聊路由策略
 type GroupRouter struct {
-	// TODO: 注入群组成员查询接口
+	chatMgr *model.ChatIDManager
 }
 
 // NewGroupRouter 创建群聊路由器
-func NewGroupRouter() *GroupRouter {
-	return &GroupRouter{}
+func NewGroupRouter(chatMgr *model.ChatIDManager) *GroupRouter {
+	return &GroupRouter{chatMgr: chatMgr}
 }
 
 // Route 群聊路由：需要查询群成员列表，排除发送者
 func (r *GroupRouter) Route(chatID string, fromUID string) (*RouteResult, error) {
-	// TODO: 从 DB/缓存中查询群成员列表
+	if r.chatMgr == nil {
+		return &RouteResult{
+			ChatID:   chatID,
+			ChatType: types.ChatTypeGroup,
+		}, nil
+	}
+
+	members, err := r.chatMgr.GetMembers(context.Background(), chatID)
+	if err != nil {
+		return nil, fmt.Errorf("get group members: %w", err)
+	}
+
+	targetUIDs := make([]string, 0, len(members))
+	for _, uid := range members {
+		if uid != fromUID {
+			targetUIDs = append(targetUIDs, uid)
+		}
+	}
+
 	return &RouteResult{
-		ChatID:   chatID,
-		ChatType: types.ChatTypeGroup,
+		ChatID:     chatID,
+		ChatType:   types.ChatTypeGroup,
+		TargetUIDs: targetUIDs,
 	}, nil
 }
 
