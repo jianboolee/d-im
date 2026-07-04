@@ -30,6 +30,7 @@ Thumbs.db
 # Environment & config overrides
 .env
 .env.*
+!.env.example
 *.local.yaml
 
 # Logs

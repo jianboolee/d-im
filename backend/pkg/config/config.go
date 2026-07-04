@@ -100,7 +100,7 @@ func Load(configPath string) (*Config, error) {
 		v.AddConfigPath(".")
 	}
 
-	// 支持环境变量覆盖（自动转大写、点→下划线）
+	// 支持环境变量覆盖：MONGODB_URI 覆盖 mongodb.uri
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 

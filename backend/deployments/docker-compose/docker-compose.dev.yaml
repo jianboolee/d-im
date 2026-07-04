@@ -2,31 +2,31 @@ version: "3.8"
 
 services:
   mongo:
-    image: mongo:7
+    image: mongodb/mongodb-community-server:8.0-ubi9-slim
     container_name: im-mongo
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
-      - mongo_data:/data/db
+      - im_mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: im_db
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: im-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
-      - redis_data:/data
+      - im_redis_data:/data
 
   nats:
     image: nats:2-alpine
     container_name: im-nats
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "4223:4222"
+      - "8223:8222"
     command: "-js -m 8222"
 
 volumes:
-  mongo_data:
-  redis_data:
+  im_mongo_data:
+  im_redis_data:
