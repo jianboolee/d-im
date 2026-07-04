@@ -3,14 +3,18 @@ package nats
 import (
 	"errors"
 	"log"
+	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
 // Config NATS配置
 type Config struct {
-	URL      string   `yaml:"url"`
-	Subjects Subjects `yaml:"subjects"`
+	URL            string        `yaml:"url"`
+	User           string        `yaml:"user"`
+	Password       string        `yaml:"password"`
+	PublishTimeout time.Duration `yaml:"publish_timeout"`
+	Subjects       Subjects      `yaml:"subjects"`
 }
 
 // Subjects NATS主题定义
@@ -28,7 +32,16 @@ type Publisher struct {
 
 // NewPublisher 创建NATS发布者
 func NewPublisher(cfg Config) (*Publisher, error) {
-	conn, err := nats.Connect(cfg.URL)
+	opts := []nats.Option{nats.Name("d-im")}
+
+	if cfg.User != "" {
+		opts = append(opts, nats.UserInfo(cfg.User, cfg.Password))
+	}
+	if cfg.PublishTimeout > 0 {
+		opts = append(opts, nats.Timeout(cfg.PublishTimeout))
+	}
+
+	conn, err := nats.Connect(cfg.URL, opts...)
 	if err != nil {
 		return nil, err
 	}

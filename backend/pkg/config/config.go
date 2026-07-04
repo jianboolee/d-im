@@ -56,8 +56,11 @@ type RedisConfig struct {
 }
 
 type NATSConfig struct {
-	URL      string       `mapstructure:"url"`
-	Subjects NATSSubjects `mapstructure:"subjects"`
+	URL            string       `mapstructure:"url"`
+	User           string       `mapstructure:"user"`
+	Password       string       `mapstructure:"password"`
+	PublishTimeout string       `mapstructure:"publish_timeout"`
+	Subjects       NATSSubjects `mapstructure:"subjects"`
 }
 
 type NATSSubjects struct {

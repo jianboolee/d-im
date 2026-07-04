@@ -61,8 +61,12 @@ func main() {
 	jwtMgr := crypto.NewJWTManager(cfg.JWT.Secret, accessExpire, refreshExpire, ticketExpire, cfg.JWT.APIKey)
 
 	// NATS
+	natsTimeout, _ := time.ParseDuration(cfg.NATS.PublishTimeout)
 	natsPub, err := natsq.NewPublisher(natsq.Config{
-		URL: cfg.NATS.URL,
+		URL:            cfg.NATS.URL,
+		User:           cfg.NATS.User,
+		Password:       cfg.NATS.Password,
+		PublishTimeout: natsTimeout,
 		Subjects: natsq.Subjects{
 			MessageSend:  cfg.NATS.Subjects.MessageSend,
 			MessagePush:  cfg.NATS.Subjects.MessagePush,
