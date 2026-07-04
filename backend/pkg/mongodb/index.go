@@ -1,0 +1,132 @@
+package mongodb
+
+import (
+	"context"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+// CreateIndexes 创建所有集合的索引
+func CreateIndexes(ctx context.Context, db *mongo.Database) error {
+	// Messages集合索引
+	messageIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "client_time", Value: -1},
+			},
+			Options: options.Index().SetName("idx_chat_time"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "msg_id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_msg_id").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "from_uid", Value: 1},
+				{Key: "created_at", Value: -1},
+			},
+			Options: options.Index().SetName("idx_from_uid_time"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "msg_type", Value: 1},
+				{Key: "chat_id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_type_chat"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "created_at", Value: 1},
+			},
+			Options: options.Index().SetName("idx_created_at").SetExpireAfterSeconds(90 * 24 * 3600), // 90天TTL
+		},
+	}
+
+	if _, err := db.Collection(CollectionMessages).Indexes().CreateMany(ctx, messageIndexes); err != nil {
+		return err
+	}
+
+	// Conversations集合索引
+	conversationIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "chat_id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_uid_chat_id").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+			Options: options.Index().SetName("idx_uid_updated"),
+		},
+	}
+
+	if _, err := db.Collection(CollectionConversations).Indexes().CreateMany(ctx, conversationIndexes); err != nil {
+		return err
+	}
+
+	// UserMailbox集合索引
+	mailboxIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "seq_id", Value: -1},
+			},
+			Options: options.Index().SetName("idx_uid_seq"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "chat_id", Value: 1},
+				{Key: "seq_id", Value: -1},
+			},
+			Options: options.Index().SetName("idx_uid_chat_seq"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "status", Value: 1},
+			},
+			Options: options.Index().SetName("idx_uid_status"),
+		},
+	}
+
+	if _, err := db.Collection(CollectionUserMailbox).Indexes().CreateMany(ctx, mailboxIndexes); err != nil {
+		return err
+	}
+
+	// Chats集合索引
+	chatsIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_chat_id").SetUnique(true),
+		},
+		{
+			Keys:    bson.D{{Key: "members", Value: 1}},
+			Options: options.Index().SetName("idx_members"),
+		},
+	}
+
+	if _, err := db.Collection(CollectionChats).Indexes().CreateMany(ctx, chatsIndexes); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// EnsureIndexes 确保索引存在（如果不存在则创建，不重复创建）
+func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
+	// 获取已有的索引名，判断是否需要创建
+	// 简化处理：直接调用 CreateIndexes，MongoDB 会自动跳过已存在的同名索引
+	return CreateIndexes(ctx, db)
+}
