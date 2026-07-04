@@ -25,6 +25,7 @@ build:
 	go build -o bin/api-gateway ./cmd/api-gateway
 	go build -o bin/message ./cmd/message
 	go build -o bin/connector ./cmd/connector
+	go build -o bin/user ./cmd/user
 
 # 启动 api-gateway
 run-gateway:
@@ -38,12 +39,17 @@ run-message:
 run-connector:
 	go run ./cmd/connector -config $(CONFIG)
 
+# 启动 user 服务（订阅事件总线）
+run-user:
+	go run ./cmd/user -config $(CONFIG)
+
 # 启动所有服务
 run:
 	@echo "Starting all services with config: $(CONFIG)"
 	@echo "  make run-gateway  # HTTP + WebSocket API"
 	@echo "  make run-message  # Message processing"
 	@echo "  make run-connector # WebSocket connections"
+	@echo "  make run-user      # User event subscription"
 
 # 清理
 clean:

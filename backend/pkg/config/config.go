@@ -67,7 +67,10 @@ type NATSSubjects struct {
 	MessageSend  string `mapstructure:"message_send"`
 	MessagePush  string `mapstructure:"message_push"`
 	MessageEvent string `mapstructure:"message_event"`
-	UserSync     string `mapstructure:"user_sync"`
+	UserCreated  string `mapstructure:"user_created"`
+	UserUpdated  string `mapstructure:"user_updated"`
+	UserStatus   string `mapstructure:"user_status"`
+	UserDeleted  string `mapstructure:"user_deleted"`
 }
 
 type SnowflakeConfig struct {

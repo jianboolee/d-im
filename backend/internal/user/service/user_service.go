@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
 
 	"d-im/pkg/model"
 
@@ -22,43 +23,92 @@ func NewUserService(repo *repository.UserRepo) *UserService {
 	return &UserService{repo: repo}
 }
 
-// SubscribeSync 订阅NATS用户同步主题
-func (s *UserService) SubscribeSync(conn *nats.Conn, subject string) (*nats.Subscription, error) {
-	sub, err := conn.Subscribe(subject, func(msg *nats.Msg) {
-		s.handleSyncMsg(context.Background(), msg.Data)
-	})
-	if err != nil {
-		return nil, err
+// SubscribeEvents 订阅事件总线用户事件
+func (s *UserService) SubscribeEvents(conn *nats.Conn) error {
+	subjects := []string{
+		"dsaas.user.created",
+		"dsaas.user.profile_updated",
+		"dsaas.user.status_changed",
+		"dsaas.user.deleted",
 	}
-	log.Printf("[user] subscribed to sync subject: %s", subject)
-	return sub, nil
+
+	for _, subject := range subjects {
+		if _, err := conn.QueueSubscribe(subject, "im-user-sync", func(msg *nats.Msg) {
+			s.handleEvent(context.Background(), msg)
+		}); err != nil {
+			return err
+		}
+		log.Printf("[user] subscribed: %s", subject)
+	}
+	return nil
 }
 
-// handleSyncMsg 处理同步消息
-func (s *UserService) handleSyncMsg(ctx context.Context, data []byte) {
-	var syncMsg model.UserSyncMsg
-	if err := json.Unmarshal(data, &syncMsg); err != nil {
-		log.Printf("[user] invalid sync message: %v", err)
+// handleEvent 处理事件总线消息
+func (s *UserService) handleEvent(ctx context.Context, msg *nats.Msg) {
+	var envelope model.EventEnvelope
+	if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+		log.Printf("[user] invalid event: %v", err)
 		return
 	}
 
-	switch syncMsg.Action {
-	case "create", "update":
-		if err := s.repo.Upsert(ctx, &syncMsg.User); err != nil {
-			log.Printf("[user] upsert failed: uid=%s, err=%v", syncMsg.User.ID, err)
+	uid := envelope.AggregateID
+	eventType := envelope.Type
+
+	switch eventType {
+	case "user.created", "user.profile_updated":
+		user := s.envelopeToUser(&envelope)
+		if err := s.repo.Upsert(ctx, user); err != nil {
+			log.Printf("[user] upsert failed: uid=%s event=%s err=%v", uid, eventType, err)
 		} else {
-			log.Printf("[user] synced: uid=%s, nickname=%s", syncMsg.User.ID, syncMsg.User.Nickname)
+			log.Printf("[user] synced: uid=%s event=%s nickname=%s", uid, eventType, user.Nickname)
 		}
-	case "delete":
-		if err := s.repo.Delete(ctx, syncMsg.User.ID); err != nil {
-			log.Printf("[user] delete failed: uid=%s, err=%v", syncMsg.User.ID, err)
+
+	case "user.status_changed":
+		status, _ := envelope.Data["status"].(string)
+		user := s.envelopeToUser(&envelope)
+		user.Status = status
+		if err := s.repo.Upsert(ctx, user); err != nil {
+			log.Printf("[user] status update failed: uid=%s err=%v", uid, err)
+		} else {
+			log.Printf("[user] status_changed: uid=%s status=%s", uid, status)
+		}
+
+	case "user.deleted":
+		if err := s.repo.SoftDelete(ctx, uid); err != nil {
+			log.Printf("[user] soft_delete failed: uid=%s err=%v", uid, err)
+		} else {
+			log.Printf("[user] soft_deleted: uid=%s", uid)
 		}
 	}
 }
 
-// BatchSync 批量同步用户
-func (s *UserService) BatchSync(ctx context.Context, users []*model.User) error {
-	return s.repo.BatchUpsert(ctx, users)
+// envelopeToUser 将事件信封 data 映射为 User 模型
+func (s *UserService) envelopeToUser(envelope *model.EventEnvelope) *model.User {
+	uid := envelope.AggregateID
+	nickname, _ := envelope.Data["nickname"].(string)
+	avatar, _ := envelope.Data["avatar_url"].(string)
+	status, _ := envelope.Data["status"].(string)
+
+	user := &model.User{
+		ID:       uid,
+		Nickname: nickname,
+		Avatar:   avatar,
+		Status:   status,
+	}
+
+	// 解析时间戳
+	if createdAt, ok := envelope.Data["created_at"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+			user.CreatedAt = t
+		}
+	}
+	if updatedAt, ok := envelope.Data["updated_at"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, updatedAt); err == nil {
+			user.UpdatedAt = t
+		}
+	}
+
+	return user
 }
 
 // FindByID 查询用户

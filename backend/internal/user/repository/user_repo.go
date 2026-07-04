@@ -23,7 +23,7 @@ func NewUserRepo(db *mongo.Database) *UserRepo {
 	}
 }
 
-// Upsert 插入或更新用户（NATS同步时调用）
+// Upsert 插入或更新用户（事件总线同步时调用）
 func (r *UserRepo) Upsert(ctx context.Context, user *model.User) error {
 	now := time.Now()
 	filter := bson.M{"_id": user.ID}
@@ -38,6 +38,9 @@ func (r *UserRepo) Upsert(ctx context.Context, user *model.User) error {
 		"$setOnInsert": bson.M{
 			"_id":        user.ID,
 			"created_at": now,
+		},
+		"$unset": bson.M{
+			"deleted_at": "",
 		},
 	}
 
@@ -69,6 +72,9 @@ func (r *UserRepo) BatchUpsert(ctx context.Context, users []*model.User) error {
 				"_id":        user.ID,
 				"created_at": now,
 			},
+			"$unset": bson.M{
+				"deleted_at": "",
+			},
 		}
 		models[i] = mongo.NewUpdateOneModel().
 			SetFilter(filter).
@@ -90,8 +96,16 @@ func (r *UserRepo) FindByID(ctx context.Context, id string) (*model.User, error)
 	return &user, nil
 }
 
-// Delete 删除用户（NATS同步delete时调用）
-func (r *UserRepo) Delete(ctx context.Context, id string) error {
-	_, err := r.coll.DeleteOne(ctx, bson.M{"_id": id})
+// SoftDelete 软删除用户（设置 deleted_at）
+func (r *UserRepo) SoftDelete(ctx context.Context, id string) error {
+	now := time.Now()
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			"deleted_at": now,
+			"updated_at": now,
+		},
+	}
+	_, err := r.coll.UpdateOne(ctx, filter, update)
 	return err
 }
