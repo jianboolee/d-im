@@ -2,6 +2,7 @@ package ws
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,21 +18,28 @@ const (
 
 // Client WebSocket客户端连接
 type Client struct {
-	UID    string
-	conn   *websocket.Conn
-	mgr    *ClientManager
-	send   chan []byte
-	closed bool
-	mu     sync.Mutex
+	UID      string
+	DeviceID string
+	conn     *websocket.Conn
+	mgr      *ClientManager
+	send     chan []byte
+	closed   bool
+	mu       sync.Mutex
+}
+
+// Key 返回唯一标识 key = uid:device_id
+func (c *Client) Key() string {
+	return c.UID + ":" + c.DeviceID
 }
 
 // NewClient 创建客户端
-func NewClient(uid string, conn *websocket.Conn, mgr *ClientManager) *Client {
+func NewClient(uid, deviceID string, conn *websocket.Conn, mgr *ClientManager) *Client {
 	return &Client{
-		UID:  uid,
-		conn: conn,
-		mgr:  mgr,
-		send: make(chan []byte, 256),
+		UID:      uid,
+		DeviceID: deviceID,
+		conn:     conn,
+		mgr:      mgr,
+		send:     make(chan []byte, 256),
 	}
 }
 
@@ -122,7 +130,7 @@ type MessageHandler func(client *Client, message []byte)
 
 // ClientManager 客户端连接管理器
 type ClientManager struct {
-	clients    map[string]*Client // uid -> client
+	clients    map[string]*Client // key = uid:device_id
 	mu         sync.RWMutex
 	handler    MessageHandler
 	register   chan *Client
@@ -151,22 +159,19 @@ func (m *ClientManager) run() {
 		select {
 		case client := <-m.register:
 			m.mu.Lock()
-			// 如果已有同UID的连接，先关闭旧连接
-			if old, exists := m.clients[client.UID]; exists {
-				old.Close()
-			}
-			m.clients[client.UID] = client
+			// 多设备支持：同 uid+device_id 的新连接会踢掉旧连接
+			m.clients[client.Key()] = client
 			m.mu.Unlock()
-			log.Printf("[ws] client connected: uid=%s", client.UID)
+			log.Printf("[ws] client connected: uid=%s device=%s", client.UID, client.DeviceID)
 
 		case client := <-m.unregister:
 			m.mu.Lock()
-			if c, exists := m.clients[client.UID]; exists && c == client {
-				delete(m.clients, client.UID)
+			if c, exists := m.clients[client.Key()]; exists && c == client {
+				delete(m.clients, client.Key())
 			}
 			m.mu.Unlock()
 			client.Close()
-			log.Printf("[ws] client disconnected: uid=%s", client.UID)
+			log.Printf("[ws] client disconnected: uid=%s device=%s", client.UID, client.DeviceID)
 		}
 	}
 }
@@ -188,17 +193,31 @@ func (m *ClientManager) HandleMessage(client *Client, message []byte) {
 	}
 }
 
-// GetClient 获取指定用户的客户端
-func (m *ClientManager) GetClient(uid string) *Client {
+// GetClient 获取指定设备的客户端
+func (m *ClientManager) GetClient(uid, deviceID string) *Client {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.clients[uid]
+	return m.clients[uid+":"+deviceID]
 }
 
-// SendToUser 向指定用户发送消息
-func (m *ClientManager) SendToUser(uid string, data []byte) bool {
+// SendToUser 向指定用户的所有设备发送消息
+func (m *ClientManager) SendToUser(uid string, data []byte) int {
 	m.mu.RLock()
-	client := m.clients[uid]
+	defer m.mu.RUnlock()
+	count := 0
+	for key, client := range m.clients {
+		if strings.HasPrefix(key, uid+":") {
+			client.Send(data)
+			count++
+		}
+	}
+	return count
+}
+
+// SendToDevice 向指定用户的指定设备发送消息
+func (m *ClientManager) SendToDevice(uid, deviceID string, data []byte) bool {
+	m.mu.RLock()
+	client := m.clients[uid+":"+deviceID]
 	m.mu.RUnlock()
 	if client == nil {
 		return false
@@ -216,17 +235,34 @@ func (m *ClientManager) BroadcastToAll(data []byte) {
 	}
 }
 
-// OnlineCount 在线用户数
+// OnlineCount 在线连接数
 func (m *ClientManager) OnlineCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.clients)
 }
 
-// IsOnline 检查用户是否在线
+// IsOnline 检查用户是否有设备在线
 func (m *ClientManager) IsOnline(uid string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	_, ok := m.clients[uid]
-	return ok
+	for key := range m.clients {
+		if strings.HasPrefix(key, uid+":") {
+			return true
+		}
+	}
+	return false
+}
+
+// GetUserDevices 获取用户所有在线设备
+func (m *ClientManager) GetUserDevices(uid string) []*Client {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var result []*Client
+	for key, client := range m.clients {
+		if strings.HasPrefix(key, uid+":") {
+			result = append(result, client)
+		}
+	}
+	return result
 }

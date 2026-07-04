@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -9,25 +11,45 @@ import (
 	"time"
 
 	"d-im/internal/connector/ws"
+	"d-im/pkg/config"
 	"d-im/pkg/crypto"
 )
 
 func main() {
-	// 1. JWT验证器（与api-gateway共享同一secret）
-	jwtMgr := crypto.NewJWTManager(
-		getEnv("JWT_SECRET", "im-secret-key-change-me"),
-		24*time.Hour,
-	)
+	configPath := flag.String("config", "configs/config.dev.yaml", "config file path")
+	flag.Parse()
 
-	// 2. 创建WebSocket服务器
-	server := ws.NewServer(":"+getEnv("WS_PORT", "8081"), func(token string) (string, error) {
+	// 1. 加载配置
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	// 2. JWT验证器
+	accessExpire, err := time.ParseDuration(cfg.JWT.AccessExpire)
+	if err != nil {
+		log.Fatalf("jwt access_expire: %v", err)
+	}
+	refreshExpire, err := time.ParseDuration(cfg.JWT.RefreshExpire)
+	if err != nil {
+		log.Fatalf("jwt refresh_expire: %v", err)
+	}
+	ticketExpire, err := time.ParseDuration(cfg.JWT.TicketExpire)
+	if err != nil {
+		log.Fatalf("jwt ticket_expire: %v", err)
+	}
+	jwtMgr := crypto.NewJWTManager(cfg.JWT.Secret, accessExpire, refreshExpire, ticketExpire, cfg.JWT.APIKey)
+
+	// 3. WebSocket服务器
+	addr := fmt.Sprintf(":%d", cfg.Server.Connector.WSPort)
+	server := ws.NewServer(addr, func(token string) (string, error) {
 		return jwtMgr.Verify(token)
 	})
 
-	// 3. 设置默认消息处理器
+	// 4. 设置消息处理器
 	server.GetManager().SetMessageHandler(ws.DefaultHandler)
 
-	// 4. 启动
+	// 5. 启动
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -37,20 +59,13 @@ func main() {
 		}
 	}()
 
-	log.Printf("[connector] started on port %s", getEnv("WS_PORT", "8081"))
+	log.Printf("[connector] started on :%d", cfg.Server.Connector.WSPort)
 
-	// 5. 等待退出
+	// 6. 等待退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("[connector] shutting down...")
 	cancel()
-}
-
-func getEnv(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
 }

@@ -2,8 +2,11 @@ package ws
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -27,7 +30,7 @@ func NewServer(addr string, authFunc AuthFunc) *Server {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin: func(r *http.Request) bool {
-				return true // 生产环境应校验Origin
+				return true
 			},
 		},
 		manager:  NewClientManager(),
@@ -52,33 +55,56 @@ func (s *Server) Start(ctx context.Context) error {
 
 // handleConnection 处理WebSocket连接
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
-	// 从URL参数获取认证token
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "missing token", http.StatusUnauthorized)
 		return
 	}
 
-	// 认证
 	uid, err := s.authFunc(token)
 	if err != nil {
 		http.Error(w, "auth failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	// 升级为WebSocket连接
+	deviceID := extractDeviceID(token)
+	if deviceID == "" {
+		deviceID = r.URL.Query().Get("device_id")
+	}
+	if deviceID == "" {
+		deviceID = "unknown"
+	}
+
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[websocket] upgrade error: %v", err)
 		return
 	}
 
-	// 创建客户端并注册
-	client := NewClient(uid, conn, s.manager)
+	client := NewClient(uid, deviceID, conn, s.manager)
 	s.manager.Register(client)
 
 	go client.ReadPump()
 	go client.WritePump()
+}
+
+func extractDeviceID(tokenStr string) string {
+	parts := strings.Split(tokenStr, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	if v, ok := claims["device_id"].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // GetManager 获取客户端管理器

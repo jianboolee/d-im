@@ -1,141 +1,127 @@
 package crypto
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTHeader JWT头部
-type JWTHeader struct {
-	Alg string `json:"alg"`
-	Typ string `json:"typ"`
-}
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+	TokenTypeTicket  = "ticket"
+)
 
-// JWTClaims JWT载荷
-type JWTClaims struct {
-	Sub string `json:"sub"`           // uid
-	Iat int64  `json:"iat"`           // 签发时间
-	Exp int64  `json:"exp"`           // 过期时间
-	Jti string `json:"jti,omitempty"` // 唯一ID（防重放）
-}
-
-// JWTManager JWT管理器
+// JWTManager JWT管理器（基于 golang-jwt/jwt v5）
 type JWTManager struct {
-	secret []byte
-	expire time.Duration
+	secret        []byte
+	accessExpire  time.Duration
+	refreshExpire time.Duration
+	ticketExpire  time.Duration
+	apiKey        string
 }
 
 // NewJWTManager 创建JWT管理器
-func NewJWTManager(secret string, expire time.Duration) *JWTManager {
-	if expire <= 0 {
-		expire = 24 * time.Hour
-	}
+func NewJWTManager(secret string, accessExpire, refreshExpire, ticketExpire time.Duration, apiKey string) *JWTManager {
 	return &JWTManager{
-		secret: []byte(secret),
-		expire: expire,
+		secret:        []byte(secret),
+		accessExpire:  accessExpire,
+		refreshExpire: refreshExpire,
+		ticketExpire:  ticketExpire,
+		apiKey:        apiKey,
 	}
 }
 
-// Issue 签发票据
-func (m *JWTManager) Issue(uid string) (string, error) {
+// VerifyAPIKey 验证业务系统 API Key
+func (m *JWTManager) VerifyAPIKey(key string) bool {
+	return key != "" && key == m.apiKey
+}
+
+// IssueAccessToken 签发访问令牌
+func (m *JWTManager) IssueAccessToken(uid, deviceID string) (string, error) {
 	now := time.Now()
-	claims := JWTClaims{
-		Sub: uid,
-		Iat: now.Unix(),
-		Exp: now.Add(m.expire).Unix(),
+	claims := jwt.MapClaims{
+		"sub":       uid,
+		"device_id": deviceID,
+		"type":      TokenTypeAccess,
+		"iat":       now.Unix(),
+		"exp":       now.Add(m.accessExpire).Unix(),
 	}
-
-	return m.sign(claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secret)
 }
 
-// Verify 验证票据，成功返回 uid
-func (m *JWTManager) Verify(token string) (string, error) {
-	claims, err := m.parse(token)
+// IssueRefreshToken 签发刷新令牌
+func (m *JWTManager) IssueRefreshToken(uid, deviceID string) (string, error) {
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub":       uid,
+		"device_id": deviceID,
+		"type":      TokenTypeRefresh,
+		"iat":       now.Unix(),
+		"exp":       now.Add(m.refreshExpire).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secret)
+}
+
+// IssueTicket 签发一次性 ticket（业务系统换取）
+func (m *JWTManager) IssueTicket(uid string) (string, error) {
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub":  uid,
+		"type": TokenTypeTicket,
+		"iat":  now.Unix(),
+		"exp":  now.Add(m.ticketExpire).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secret)
+}
+
+// Verify 验证 token，返回 claims map
+func (m *JWTManager) Verify(tokenStr string) (string, error) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return m.secret, nil
+	})
 	if err != nil {
 		return "", err
 	}
 
-	now := time.Now().Unix()
-	if claims.Exp > 0 && now > claims.Exp {
-		return "", fmt.Errorf("token expired")
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return "", fmt.Errorf("invalid token")
 	}
 
-	if claims.Sub == "" {
+	sub, err := claims.GetSubject()
+	if err != nil {
 		return "", fmt.Errorf("missing sub claim")
 	}
 
-	return claims.Sub, nil
+	return sub, nil
 }
 
-// sign 签名生成JWT
-func (m *JWTManager) sign(claims JWTClaims) (string, error) {
-	header := JWTHeader{Alg: "HS256", Typ: "JWT"}
-
-	headerJSON, _ := json.Marshal(header)
-	claimsJSON, _ := json.Marshal(claims)
-
-	headerB64 := base64URLEncode(headerJSON)
-	claimsB64 := base64URLEncode(claimsJSON)
-
-	signingInput := headerB64 + "." + claimsB64
-	signature := m.hmacSign(signingInput)
-
-	return signingInput + "." + base64URLEncode(signature), nil
-}
-
-// parse 解析JWT
-func (m *JWTManager) parse(token string) (*JWTClaims, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid token format")
-	}
-
-	// 验证签名
-	signingInput := parts[0] + "." + parts[1]
-	expectedSig := base64URLEncode(m.hmacSign(signingInput))
-
-	actualSig := parts[2]
-	if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
-		return nil, fmt.Errorf("invalid signature")
-	}
-
-	// 解码claims
-	claimsJSON, err := base64URLDecode(parts[1])
+// VerifyAs 验证 token 并检查类型
+func (m *JWTManager) VerifyAs(tokenStr string, expectedType string) (string, error) {
+	uid, err := m.Verify(tokenStr)
 	if err != nil {
-		return nil, fmt.Errorf("decode claims: %w", err)
+		return "", err
 	}
 
-	var claims JWTClaims
-	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
-		return nil, fmt.Errorf("unmarshal claims: %w", err)
+	// 额外解析获取 type claim
+	token, _ := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		return m.secret, nil
+	})
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		if tokenType, exists := claims["type"]; exists {
+			if tokenType != expectedType {
+				return "", fmt.Errorf("unexpected token type: %v", tokenType)
+			}
+		}
 	}
 
-	return &claims, nil
-}
-
-// hmacSign HMAC-SHA256签名
-func (m *JWTManager) hmacSign(input string) []byte {
-	mac := hmac.New(sha256.New, m.secret)
-	mac.Write([]byte(input))
-	return mac.Sum(nil)
-}
-
-func base64URLEncode(data []byte) string {
-	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
-}
-
-func base64URLDecode(s string) ([]byte, error) {
-	// 补齐padding
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	}
-	return base64.URLEncoding.DecodeString(s)
+	return uid, nil
 }

@@ -16,14 +16,22 @@ func NewRouter(
 ) http.Handler {
 	mux := http.NewServeMux()
 
-	// 公开路由（不需要认证）
+	// ---- 公开路由（不需要认证）----
+	// 健康检查
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.HandleFunc("POST /api/v1/auth/token", authHandler.IssueToken)
 
-	// 受保护的消息路由
+	// 业务系统内部接口：签发一次性 ticket（API Key 鉴权，在 handler 内完成）
+	mux.HandleFunc("POST /api/v1/auth/ticket", authHandler.IssueTicket)
+
+	// 前端公开接口：ticket 换取 token / 刷新 / 登出
+	mux.HandleFunc("POST /api/v1/auth/token", authHandler.ExchangeToken)
+	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.RefreshToken)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+
+	// ---- 受保护的消息路由（需要 JWT access_token）----
 	protected := http.NewServeMux()
 	protected.HandleFunc("POST /api/v1/message/send", messageHandler.SendMessage)
 	protected.HandleFunc("POST /api/v1/message/recall", messageHandler.RecallMessage)

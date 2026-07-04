@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -13,6 +15,7 @@ import (
 	"d-im/internal/gateway/router"
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
+	"d-im/pkg/config"
 	"d-im/pkg/crypto"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -20,49 +23,67 @@ import (
 )
 
 func main() {
-	// 1. 初始化 MongoDB
+	configPath := flag.String("config", "configs/config.dev.yaml", "config file path")
+	flag.Parse()
+
+	// 1. 加载配置
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	// 2. 初始化 MongoDB
 	ctx := context.Background()
 	db, err := mongodb.NewClient(ctx, mongodb.Config{
-		URI:      getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		Database: getEnv("MONGO_DB", "im_db"),
-		PoolSize: 100,
-		Timeout:  10,
+		URI:      cfg.MongoDB.URI,
+		Database: cfg.MongoDB.Database,
+		PoolSize: cfg.MongoDB.PoolSize,
+		Timeout:  cfg.MongoDB.Timeout,
 	})
 	if err != nil {
-		log.Fatalf("mongodb connect: %v", err)
+		log.Fatalf("mongodb: %v", err)
 	}
 
-	// 2. 初始化雪花ID
+	// 3. 初始化雪花ID
 	idGen, err := snowflake.NewGenerator(snowflake.Config{
-		WorkerID:     1,
-		DatacenterID: 1,
+		WorkerID:     cfg.Snowflake.WorkerID,
+		DatacenterID: cfg.Snowflake.DatacenterID,
 	})
 	if err != nil {
-		log.Fatalf("snowflake init: %v", err)
+		log.Fatalf("snowflake: %v", err)
 	}
 
-	// 3. 初始化 JWT
-	jwtMgr := crypto.NewJWTManager(
-		getEnv("JWT_SECRET", "im-secret-key-change-me"),
-		24*time.Hour,
-	)
+	// 4. 初始化 JWT
+	accessExpire, err := time.ParseDuration(cfg.JWT.AccessExpire)
+	if err != nil {
+		log.Fatalf("jwt access_expire: %v", err)
+	}
+	refreshExpire, err := time.ParseDuration(cfg.JWT.RefreshExpire)
+	if err != nil {
+		log.Fatalf("jwt refresh_expire: %v", err)
+	}
+	ticketExpire, err := time.ParseDuration(cfg.JWT.TicketExpire)
+	if err != nil {
+		log.Fatalf("jwt ticket_expire: %v", err)
+	}
+	jwtMgr := crypto.NewJWTManager(cfg.JWT.Secret, accessExpire, refreshExpire, ticketExpire, cfg.JWT.APIKey)
 
-	// 4. 初始化各层依赖
+	// 5. 初始化各层依赖
 	chatMgr := model.NewChatIDManager(db)
 	msgRepo := repository.NewMessageRepo(db)
 	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr)
 
-	// 5. 初始化 HTTP
+	// 6. 初始化 HTTP
 	authHandler := handler.NewAuthHandler(jwtMgr)
 	messageHandler := handler.NewMessageHandler(msgSvc)
 	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler)
 
 	server := gateway.NewServer(gateway.Config{
-		HTTPPort: getEnv("HTTP_PORT", "8080"),
-		GRPCPort: getEnv("GRPC_PORT", "9080"),
+		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),
+		GRPCPort: itoa(cfg.Server.Gateway.GRPCPort),
 	}, httpHandler)
 
-	// 6. 启动
+	// 7. 启动
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -72,9 +93,9 @@ func main() {
 		}
 	}()
 
-	log.Println("[api-gateway] started")
+	log.Printf("[api-gateway] started on :%d", cfg.Server.Gateway.HTTPPort)
 
-	// 7. 等待退出信号
+	// 8. 等待退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -83,9 +104,6 @@ func main() {
 	cancel()
 }
 
-func getEnv(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
+func itoa(n int) string {
+	return fmt.Sprintf("%d", n)
 }
