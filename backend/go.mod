@@ -2,7 +2,10 @@ module d-im
 
 go 1.23.4
 
-require go.mongodb.org/mongo-driver v1.17.9
+require (
+	github.com/gorilla/websocket v1.5.3
+	go.mongodb.org/mongo-driver v1.17.9
+)
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect
