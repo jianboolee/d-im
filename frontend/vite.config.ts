@@ -3,8 +3,8 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-const API_TARGET = process.env.VITE_IM_API_PROXY_TARGET ?? 'http://localhost:8901'
-const WS_TARGET = process.env.VITE_IM_WS_PROXY_TARGET ?? 'ws://localhost:8902'
+const API_TARGET = process.env.VITE_IM_API_PROXY_TARGET ?? 'http://localhost:8080'
+const WS_TARGET = process.env.VITE_IM_WS_PROXY_TARGET ?? 'ws://localhost:8081'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,11 +16,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/im/api': {
+      '/api': {
         target: API_TARGET,
         changeOrigin: true,
       },
-      '/im/ws': {
+      '/ws': {
         target: WS_TARGET,
         ws: true,
         changeOrigin: true,

@@ -12,12 +12,13 @@ import (
 
 // AuthHandler Token签发处理器
 type AuthHandler struct {
-	jwtMgr *crypto.JWTManager
+	jwtMgr      *crypto.JWTManager
+	frontendURL string
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(jwtMgr *crypto.JWTManager) *AuthHandler {
-	return &AuthHandler{jwtMgr: jwtMgr}
+func NewAuthHandler(jwtMgr *crypto.JWTManager, frontendURL string) *AuthHandler {
+	return &AuthHandler{jwtMgr: jwtMgr, frontendURL: frontendURL}
 }
 
 // IssueTicket 业务系统调用：签发一次性 ticket
@@ -52,7 +53,7 @@ func (h *AuthHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ticket":       ticket,
-		"redirect_url": "/chat?ticket=" + ticket,
+		"redirect_url": h.frontendURL + "/im/enter?ticket=" + ticket,
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"d-im/internal/gateway/router"
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
+	userRepo "d-im/internal/user/repository"
 	"d-im/pkg/config"
 	"d-im/pkg/crypto"
 	"d-im/pkg/model"
@@ -35,7 +36,6 @@ func main() {
 
 	ctx := context.Background()
 
-	// MongoDB
 	db, err := mongodb.NewClient(ctx, mongodb.Config{
 		URI:      cfg.MongoDB.URI,
 		Database: cfg.MongoDB.Database,
@@ -46,7 +46,6 @@ func main() {
 		log.Fatalf("mongodb: %v", err)
 	}
 
-	// 雪花ID
 	idGen, err := snowflake.NewGenerator(snowflake.Config{
 		WorkerID:     cfg.Snowflake.WorkerID,
 		DatacenterID: cfg.Snowflake.DatacenterID,
@@ -55,13 +54,11 @@ func main() {
 		log.Fatalf("snowflake: %v", err)
 	}
 
-	// JWT
 	accessExpire, _ := time.ParseDuration(cfg.JWT.AccessExpire)
 	refreshExpire, _ := time.ParseDuration(cfg.JWT.RefreshExpire)
 	ticketExpire, _ := time.ParseDuration(cfg.JWT.TicketExpire)
 	jwtMgr := crypto.NewJWTManager(cfg.JWT.Secret, accessExpire, refreshExpire, ticketExpire, cfg.JWT.APIKey)
 
-	// NATS
 	natsTimeout, _ := time.ParseDuration(cfg.NATS.PublishTimeout)
 	natsPub, err := natsq.NewPublisher(natsq.Config{
 		URL:            cfg.NATS.URL,
@@ -79,18 +76,18 @@ func main() {
 	}
 	defer natsPub.Close()
 
-	// 依赖注入
 	chatMgr := model.NewChatIDManager(db)
 	msgRepo := repository.NewMessageRepo(db)
 	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, natsPub)
 
-	// HTTP
 	convMgr := model.NewConversationManager(db)
 	conversationSvc := convSvc.NewConversationService(convMgr)
-	authHandler := handler.NewAuthHandler(jwtMgr)
+	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL)
 	messageHandler := handler.NewMessageHandler(msgSvc)
 	convHandler := handler.NewConversationHandler(conversationSvc)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler)
+	uRepo := userRepo.NewUserRepo(db)
+	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo, msgRepo, chatMgr)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, sdkHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

@@ -2,6 +2,7 @@ app:
   name: d-im
   version: "1.0.0"
   env: production
+  frontend_url: http://localhost:5173
 
 server:
   gateway:

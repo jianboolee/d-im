@@ -21,9 +21,10 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name    string `mapstructure:"name"`
-	Version string `mapstructure:"version"`
-	Env     string `mapstructure:"env"`
+	Name        string `mapstructure:"name"`
+	Version     string `mapstructure:"version"`
+	Env         string `mapstructure:"env"`
+	FrontendURL string `mapstructure:"frontend_url"` // 前端地址：http://localhost:5173
 }
 
 type ServerConfig struct {
