@@ -8,7 +8,9 @@ function apiOrigin(): string {
   if (import.meta.env.VITE_IM_API_BASE) {
     return import.meta.env.VITE_IM_API_BASE.replace(/\/$/, '')
   }
-  return 'http://localhost:8080'
+  // 开发模式：空字符串 = 走 Vite 代理
+  // 生产模式：注入完整后端地址
+  return ''
 }
 
 function wsOrigin(): string {

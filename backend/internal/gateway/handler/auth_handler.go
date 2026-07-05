@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"d-im/pkg/crypto"
 )
@@ -54,6 +55,50 @@ func (h *AuthHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ticket":       ticket,
 		"redirect_url": h.frontendURL + "/im/enter?ticket=" + ticket,
+	})
+}
+
+// CreateSession 业务系统用 API Key 为指定用户创建会话（签发 JWT）
+// POST /api/v1/auth/session
+// Header: X-API-Key: <api_key>
+// Body: {"uid": "xxx"}
+func (h *AuthHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("X-API-Key")
+	if !h.jwtMgr.VerifyAPIKey(apiKey) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid api key"})
+		return
+	}
+
+	var req struct {
+		UID string `json:"uid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.UID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "uid is required"})
+		return
+	}
+
+	deviceID := "sdk_" + time.Now().Format("20060102150405")
+	accessToken, err := h.jwtMgr.IssueAccessToken(req.UID, deviceID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "issue token failed"})
+		return
+	}
+	refreshToken, err := h.jwtMgr.IssueRefreshToken(req.UID, deviceID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "issue token failed"})
+		return
+	}
+
+	log.Printf("[auth] session created: uid=%s", req.UID)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
 	})
 }
 

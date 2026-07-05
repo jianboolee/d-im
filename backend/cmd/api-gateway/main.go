@@ -78,15 +78,15 @@ func main() {
 
 	chatMgr := model.NewChatIDManager(db)
 	msgRepo := repository.NewMessageRepo(db)
-	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, natsPub)
-
 	convMgr := model.NewConversationManager(db)
+	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, convMgr, natsPub)
+
 	conversationSvc := convSvc.NewConversationService(convMgr)
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL)
 	messageHandler := handler.NewMessageHandler(msgSvc)
 	convHandler := handler.NewConversationHandler(conversationSvc)
 	uRepo := userRepo.NewUserRepo(db)
-	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo, msgRepo, chatMgr)
+	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)
 	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, sdkHandler)
 
 	server := gateway.NewServer(gateway.Config{

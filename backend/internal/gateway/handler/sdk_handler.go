@@ -9,7 +9,6 @@ import (
 
 	"d-im/pkg/model"
 	"d-im/pkg/sdk"
-	"d-im/pkg/types"
 
 	"d-im/pkg/crypto"
 )
@@ -19,24 +18,14 @@ type userRepo interface {
 	BatchUpsert(ctx context.Context, users []*model.User) error
 }
 
-type msgRepo interface {
-	Insert(ctx context.Context, msg *model.Message) error
-}
-
-type chatMgr interface {
-	CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*model.Chat, error)
-}
-
 // SDKHandler 业务 SDK HTTP 处理器
 type SDKHandler struct {
 	jwtMgr   *crypto.JWTManager
 	userRepo userRepo
-	msgRepo  msgRepo
-	chatMgr  chatMgr
 }
 
-func NewSDKHandler(jwtMgr *crypto.JWTManager, uRepo userRepo, mRepo msgRepo, cMgr chatMgr) *SDKHandler {
-	return &SDKHandler{jwtMgr: jwtMgr, userRepo: uRepo, msgRepo: mRepo, chatMgr: cMgr}
+func NewSDKHandler(jwtMgr *crypto.JWTManager, uRepo userRepo) *SDKHandler {
+	return &SDKHandler{jwtMgr: jwtMgr, userRepo: uRepo}
 }
 
 func (h *SDKHandler) auth(w http.ResponseWriter, r *http.Request) bool {
@@ -60,13 +49,7 @@ func (h *SDKHandler) SyncUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u := &model.User{
-		ID:        user.UserID,
-		Nickname:  user.Nickname,
-		Avatar:    user.Avatar,
-		Status:    user.Status,
-		UpdatedAt: time.Now(),
-	}
+	u := &model.User{ID: user.UserID, Nickname: user.Nickname, Avatar: user.Avatar, Status: user.Status, UpdatedAt: time.Now()}
 	if err := h.userRepo.Upsert(r.Context(), u); err != nil {
 		log.Printf("[sdk] upsert user failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "upsert failed"})
@@ -93,13 +76,7 @@ func (h *SDKHandler) BatchSyncUsers(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	users := make([]*model.User, len(req.Users))
 	for i, u := range req.Users {
-		users[i] = &model.User{
-			ID:        u.UserID,
-			Nickname:  u.Nickname,
-			Avatar:    u.Avatar,
-			Status:    u.Status,
-			UpdatedAt: now,
-		}
+		users[i] = &model.User{ID: u.UserID, Nickname: u.Nickname, Avatar: u.Avatar, Status: u.Status, UpdatedAt: now}
 	}
 	if err := h.userRepo.BatchUpsert(r.Context(), users); err != nil {
 		log.Printf("[sdk] batch upsert failed: %v", err)
@@ -108,44 +85,4 @@ func (h *SDKHandler) BatchSyncUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[sdk] batch synced %d users", len(users))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// SendMessage POST /api/v1/sdk/message/send
-func (h *SDKHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
-	if !h.auth(w, r) {
-		return
-	}
-
-	var req sdk.SendMessageReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	now := time.Now()
-	msg := &model.Message{
-		MsgID:      now.Format("20060102150405") + "000000",
-		ChatID:     req.ChatID,
-		ChatType:   types.ChatType(req.ChatType),
-		FromUID:    req.FromUID,
-		FromName:   req.FromName,
-		MsgType:    types.MessageType(req.MsgType),
-		Content:    req.Content,
-		Status:     "sent",
-		ClientTime: now,
-		ServerTime: now,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-	}
-	if err := h.msgRepo.Insert(r.Context(), msg); err != nil {
-		log.Printf("[sdk] insert message failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "insert failed"})
-		return
-	}
-	log.Printf("[sdk] message sent: msg_id=%s from=%s to=%s", msg.MsgID, req.FromUID, req.ChatID)
-	writeJSON(w, http.StatusOK, sdk.SendMessageResp{
-		MsgID:      msg.MsgID,
-		ServerTime: now.Format(time.RFC3339),
-		Status:     "sent",
-	})
 }

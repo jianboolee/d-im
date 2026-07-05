@@ -72,6 +72,39 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		return nil, fmt.Errorf("insert message: %w", err)
 	}
 
+	// 自动创建 Chat 实体和 Conversation 视图
+	if s.chatMgr != nil && s.convMgr != nil && req.ChatType == types.ChatTypeSingle && len(req.TargetUIDs) > 0 {
+		chat, err := s.chatMgr.CreateOrGetSingleChat(ctx, req.FromUID, req.TargetUIDs[0])
+		if err != nil {
+			log.Printf("[send_service] create chat failed: %v", err)
+		} else {
+			// 为双方创建 Conversation 视图
+			for _, uid := range []string{req.FromUID, req.TargetUIDs[0]} {
+				conv := &model.Conversation{
+					UID:      uid,
+					ChatID:   chat.ChatID,
+					ChatType: chat.ChatType,
+				}
+				_ = s.convMgr.CreateOrUpdate(ctx, conv)
+			}
+
+			// 更新最后消息摘要
+			lastMsg := &types.LastMessage{
+				MsgID:          msg.MsgID,
+				FromUID:        msg.FromUID,
+				MsgType:        msg.MsgType,
+				ContentPreview: getContentPreview(msg.Content),
+				ClientTime:     msg.ClientTime,
+			}
+			for _, uid := range []string{req.FromUID, req.TargetUIDs[0]} {
+				_ = s.convMgr.UpdateLastMsg(ctx, uid, chat.ChatID, lastMsg)
+			}
+
+			// 目标用户的未读计数 +1
+			_ = s.convMgr.UpdateUnreadCount(ctx, req.TargetUIDs[0], chat.ChatID, 1)
+		}
+	}
+
 	if len(req.TargetUIDs) > 0 {
 		s.distributeToMailbox(ctx, msg, req.TargetUIDs)
 	}

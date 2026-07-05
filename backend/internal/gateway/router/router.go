@@ -29,11 +29,11 @@ func NewRouter(
 	mux.HandleFunc("POST /api/v1/auth/token", authHandler.ExchangeToken)
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.RefreshToken)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.HandleFunc("POST /api/v1/auth/session", authHandler.CreateSession)
 
 	// 业务 SDK 路由（API Key 鉴权，在 handler 内完成）
 	mux.HandleFunc("POST /api/v1/sdk/user/sync", sdkHandler.SyncUser)
 	mux.HandleFunc("POST /api/v1/sdk/user/batch-sync", sdkHandler.BatchSyncUsers)
-	mux.HandleFunc("POST /api/v1/sdk/message/send", sdkHandler.SendMessage)
 
 	// ---- 受保护的路由（需要 JWT access_token）----
 	protected := http.NewServeMux()

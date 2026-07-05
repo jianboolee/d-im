@@ -12,15 +12,17 @@ type MessageService struct {
 	repo    *repository.MessageRepo
 	idGen   *snowflake.Generator
 	chatMgr *model.ChatIDManager
+	convMgr *model.ConversationManager
 	natsPub *natsq.Publisher
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, idGen *snowflake.Generator, chatMgr *model.ChatIDManager, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, idGen *snowflake.Generator, chatMgr *model.ChatIDManager, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
 		repo:    repo,
 		idGen:   idGen,
 		chatMgr: chatMgr,
+		convMgr: convMgr,
 		natsPub: natsPub,
 	}
 }
