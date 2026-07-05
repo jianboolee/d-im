@@ -162,6 +162,47 @@ func extractClaim(tokenStr, key string) string {
 	return ""
 }
 
+// Login 开发模式登录：uid + device_id 直接签发 token pair
+// POST /api/v1/auth/login
+// Body: {"uid": "xxx", "device_id": "web_chrome_v1"}
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID      string `json:"uid"`
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.UID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "uid is required"})
+		return
+	}
+	if req.DeviceID == "" {
+		req.DeviceID = "unknown"
+	}
+
+	accessToken, err := h.jwtMgr.IssueAccessToken(req.UID, req.DeviceID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "issue token failed"})
+		return
+	}
+	refreshToken, err := h.jwtMgr.IssueRefreshToken(req.UID, req.DeviceID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "issue token failed"})
+		return
+	}
+
+	log.Printf("[auth] login: uid=%s device=%s", req.UID, req.DeviceID)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    900,
+	})
+}
+
 // Logout 登出（前端可调用，清除本地 token）
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {

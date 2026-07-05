@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	convSvc "d-im/internal/conversation/service"
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
@@ -84,9 +85,12 @@ func main() {
 	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, natsPub)
 
 	// HTTP
+	convMgr := model.NewConversationManager(db)
+	conversationSvc := convSvc.NewConversationService(convMgr)
 	authHandler := handler.NewAuthHandler(jwtMgr)
 	messageHandler := handler.NewMessageHandler(msgSvc)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler)
+	convHandler := handler.NewConversationHandler(conversationSvc)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

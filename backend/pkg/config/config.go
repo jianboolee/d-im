@@ -114,6 +114,11 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
 
+	// 强制环境变量覆盖：逐个 key 重新 Get（触发 AutomaticEnv 生效）
+	for _, key := range v.AllKeys() {
+		v.Set(key, v.Get(key))
+	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
