@@ -1,14 +1,13 @@
 <template>
   <div class="chat-page">
     <div class="chat-layout">
-      <!-- 侧边栏：会话列表 -->
       <aside class="chat-sidebar">
         <div class="sidebar-header">
           <span class="sidebar-title">会话</span>
         </div>
         <div class="sidebar-list">
           <button
-            v-for="conv in conversationList"
+            v-for="conv in convList"
             :key="conv.chat_id"
             class="conv-item"
             :class="{ active: selectedChatId === conv.chat_id }"
@@ -17,14 +16,14 @@
             <span class="conv-name">{{ conv.chat_id }}</span>
             <span v-if="conv.unread_count" class="conv-badge">{{ conv.unread_count }}</span>
           </button>
-          <p v-if="!conversationList.length" class="empty-hint">暂无会话</p>
+          <p v-if="convStore.loading" class="empty-hint">加载中…</p>
+          <p v-else-if="!convList.length" class="empty-hint">暂无会话</p>
         </div>
         <div class="sidebar-footer">
           <button class="logout-btn" @click="handleLogout">退出</button>
         </div>
       </aside>
 
-      <!-- 聊天区域 -->
       <main class="chat-main" v-if="selectedChatId">
         <div class="chat-header">
           <span class="chat-title">{{ selectedChatId }}</span>
@@ -50,19 +49,18 @@
           </div>
         </div>
 
-        <div class="chat-input">
-          <input
+        <div class="chat-input-row">
+          <MultilineInput
             v-model="inputText"
-            class="input"
             placeholder="输入消息…"
-            @keyup.enter="sendTextMessage"
-            :disabled="!wsConnected"
+            :min-rows="1"
+            :max-rows="6"
+            @enter="sendTextMessage"
           />
-          <button class="send-btn" @click="sendTextMessage" :disabled="!wsConnected">发送</button>
+          <button class="send-btn" @click="sendTextMessage" :disabled="!wsConnected || !inputText.trim()">发送</button>
         </div>
       </main>
 
-      <!-- 未选中会话 -->
       <div class="chat-empty" v-else>
         <p>选择一个会话开始聊天</p>
       </div>
@@ -71,57 +69,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIMStore } from '@/stores/im'
 import { useUserStore } from '@/stores/user'
-import type { Message, Conversation } from '@/sdk/im'
+import { useConversationListStore } from '@/stores/conversationList'
+import MultilineInput from '@/components/im/MultilineInput.vue'
+import type { Message } from '@/sdk/im'
 import { ChatType } from '@/sdk/im'
 
 const router = useRouter()
 const userStore = useUserStore()
 const imStore = useIMStore()
+const convStore = useConversationListStore()
 
 const inputText = ref('')
 const messages = ref<Message[]>([])
 const selectedChatId = ref('')
-const conversationList = ref<Conversation[]>([])
 const wsConnected = ref(false)
 const messageListRef = ref<HTMLElement | null>(null)
 
+const convList = computed(() => convStore.conversations)
+
 const myUid = computed(() => {
-  // 从 JWT sub 解析 uid（简化：直接读 token payload）
   try {
     const t = userStore.token
     if (!t) return ''
     const payload = JSON.parse(atob(t.split('.')[1] || ''))
     return payload.sub || ''
-  } catch {
-    return ''
-  }
+  } catch { return '' }
 })
-
-// ---- 会话列表 ----
-async function loadConversations() {
-  try {
-    const sdk = imStore.imSDK
-    if (!sdk) return
-    conversationList.value = await sdk.getConversations()
-  } catch (e) {
-    console.warn('加载会话列表失败', e)
-  }
-}
 
 function selectConversation(chatId: string) {
   selectedChatId.value = chatId
   messages.value = []
+  convStore.clearUnread(chatId)
 }
 
-// ---- 发送消息 ----
 async function sendTextMessage() {
   const text = inputText.value.trim()
   if (!text || !selectedChatId.value) return
-
   const sdk = imStore.imSDK
   if (!sdk) return
 
@@ -130,37 +117,34 @@ async function sendTextMessage() {
   if (!targetUIDs.length) targetUIDs.push('demo_target')
 
   try {
-    await sdk.sendTextMessage(
-      selectedChatId.value,
-      ChatType.Single,
-      text,
-      targetUIDs,
-      myUid.value || undefined,
-    )
+    await sdk.sendTextMessage(selectedChatId.value, ChatType.Single, text, targetUIDs, myUid.value || undefined)
     inputText.value = ''
   } catch (e: any) {
     alert('发送失败: ' + (e?.message || ''))
   }
 }
 
-// ---- 接收消息 ----
 function onNewMessage(msg: Message) {
+  convStore.onIncomingMessage(msg, selectedChatId.value || undefined)
   if (msg.chat_id === selectedChatId.value) {
     messages.value = [...messages.value, msg]
     nextTick(() => scrollToBottom())
   }
 }
 
-function onConnection(status: import('@/sdk/im').ConnectionStatus) {
-  wsConnected.value = status.status === 'connected'
+async function handleLogout() {
+  convStore.reset()
+  await userStore.logout()
+  router.replace({ name: 'im-login' })
 }
 
-// ---- 初始化 ----
 onMounted(async () => {
   imStore.addMessageHandler(onNewMessage)
   imStore.initSDK()
-  await loadConversations()
+  await convStore.loadConversations()
 })
+
+watch(() => imStore.isConnected, (v) => { wsConnected.value = v })
 
 onUnmounted(() => {
   imStore.removeMessageHandler(onNewMessage)
@@ -174,11 +158,6 @@ function scrollToBottom() {
 function formatTime(iso: string) {
   if (!iso) return ''
   return new Date(iso).toLocaleTimeString()
-}
-
-async function handleLogout() {
-  await userStore.logout()
-  router.replace({ name: 'im-login' })
 }
 </script>
 
@@ -229,12 +208,13 @@ async function handleLogout() {
 .msg-time { font-size: 11px; color: #999; margin-top: 4px; display: block; }
 .msg-bubble.mine .msg-time { color: rgba(255,255,255,0.7); }
 
-.chat-input {
-  padding: 12px 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px;
+.chat-input-row {
+  padding: 12px 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; align-items: flex-end;
 }
-.input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; outline: none; font-size: 14px; }
-.input:focus { border-color: #4b86f8; }
-.send-btn { padding: 10px 20px; background: #4b86f8; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.send-btn {
+  padding: 10px 20px; background: #4b86f8; color: #fff;
+  border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;
+}
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .chat-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #999; font-size: 16px; }
