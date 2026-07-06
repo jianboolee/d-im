@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"regexp"
 	"time"
 
 	"d-im/pkg/model"
@@ -104,6 +105,60 @@ func (r *MessageRepo) FindPageByChatSeq(ctx context.Context, chatID string, limi
 		"chat_id":    chatID,
 		"deleted_at": bson.M{"$exists": false},
 		"seq":        bson.M{"$exists": true},
+	}
+
+	if cursorValue != "" {
+		cursor, err := DecodeMessageCursor(cursorValue)
+		if err != nil {
+			return nil, "", false, err
+		}
+		filter["seq"] = bson.M{"$exists": true, "$lt": cursor.Seq}
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "seq", Value: -1}}).
+		SetLimit(limit + 1)
+
+	dbCursor, err := r.messagesColl.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, "", false, err
+	}
+	defer dbCursor.Close(ctx)
+
+	var messages []*model.Message
+	if err := dbCursor.All(ctx, &messages); err != nil {
+		return nil, "", false, err
+	}
+	normalizeMessages(messages)
+
+	hasMore := int64(len(messages)) > limit
+	if hasMore {
+		messages = messages[:limit]
+	}
+
+	nextCursor := ""
+	if hasMore && len(messages) > 0 {
+		last := messages[len(messages)-1]
+		nextCursor = EncodeMessageCursor(MessageCursor{Seq: last.Seq})
+	}
+
+	return messages, nextCursor, hasMore, nil
+}
+
+// SearchPageByChatSeq 在指定会话内按内容预览搜索消息。内部按新到旧取数，调用方可按展示需要反转。
+func (r *MessageRepo) SearchPageByChatSeq(ctx context.Context, chatID, keyword string, limit int64, cursorValue string) ([]*model.Message, string, bool, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	filter := bson.M{
+		"chat_id":         chatID,
+		"deleted_at":      bson.M{"$exists": false},
+		"seq":             bson.M{"$exists": true},
+		"content_preview": bson.M{"$regex": regexp.QuoteMeta(keyword), "$options": "i"},
 	}
 
 	if cursorValue != "" {

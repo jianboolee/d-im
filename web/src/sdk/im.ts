@@ -780,7 +780,7 @@ export enum MessageType {
     ): Promise<Conversation> {
       const data = await apiRequest<Record<string, unknown>>(
         this.baseURL,
-        `/im/api/conversations/${conversationId}/settings`,
+        `/api/v1/conversations/${encodeURIComponent(conversationId)}/settings`,
         this.token,
         {
           method: 'PATCH',
@@ -804,7 +804,7 @@ export enum MessageType {
         has_more?: boolean;
       }>(
         this.baseURL,
-        `/im/api/conversations/${conversationId}/messages/search?${queryParams}`,
+        `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/search?${queryParams}`,
         this.token,
       );
 

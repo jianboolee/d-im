@@ -38,3 +38,8 @@ func (s *MessageService) GenerateMsgID() string {
 func (s *MessageService) GetHistory(ctx context.Context, uid, chatID string, limit int64, cursor string) ([]*model.Message, string, bool, error) {
 	return s.repo.FindPageByChatSeq(ctx, chatID, limit, cursor)
 }
+
+// SearchHistory 在指定会话内搜索历史消息页，返回值为新到旧顺序。
+func (s *MessageService) SearchHistory(ctx context.Context, uid, chatID, keyword string, limit int64, cursor string) ([]*model.Message, string, bool, error) {
+	return s.repo.SearchPageByChatSeq(ctx, chatID, keyword, limit, cursor)
+}

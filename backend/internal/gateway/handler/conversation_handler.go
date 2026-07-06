@@ -183,6 +183,47 @@ func (h *ConversationHandler) ReadConversation(w http.ResponseWriter, r *http.Re
 	})
 }
 
+// UpdateConversationSettings 更新当前用户的会话设置。
+// PATCH /api/v1/conversations/{id}/settings
+func (h *ConversationHandler) UpdateConversationSettings(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.GetUserID(r.Context())
+	if uid == "" {
+		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		return
+	}
+
+	conversationID := r.PathValue("id")
+	if conversationID == "" {
+		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		return
+	}
+
+	var req struct {
+		Pinned *bool `json:"pinned"`
+		Muted  *bool `json:"muted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		return
+	}
+	if req.Pinned == nil && req.Muted == nil {
+		writeAPIError(w, http.StatusBadRequest, 400013, "settings is empty")
+		return
+	}
+
+	conv, err := h.convSvc.UpdateSettings(r.Context(), uid, conversationID, req.Pinned, req.Muted)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, 500204, "update conversation settings failed")
+		return
+	}
+
+	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+}
+
 type conversationDTO struct {
 	ID               string             `json:"id"`
 	ConversationID   string             `json:"conversation_id"`

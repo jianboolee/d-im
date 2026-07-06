@@ -177,6 +177,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		for _, uid := range participantUIDs {
 			_ = s.convMgr.UpdateLastMsg(ctx, uid, msg.ChatID, lastMsg)
 		}
+		s.markSenderMessageRead(ctx, req.SenderID, msg)
 	}
 
 	// 通过 NATS 发布推送事件，通知 connector
@@ -203,6 +204,7 @@ func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMess
 	if err != nil && err != mongo.ErrNoDocuments {
 		return nil, fmt.Errorf("find sender mailbox: %w", err)
 	}
+	s.markSenderMessageRead(ctx, req.SenderID, msg)
 
 	return &SendMessageResp{
 		MsgID:         msg.MsgID,
@@ -211,6 +213,15 @@ func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMess
 		Message:       msg,
 		SenderMailbox: mailbox,
 	}, nil
+}
+
+func (s *MessageService) markSenderMessageRead(ctx context.Context, senderID string, msg *model.Message) {
+	if s.convMgr == nil || senderID == "" || msg == nil || msg.Seq <= 0 {
+		return
+	}
+	if err := s.convMgr.MarkRead(ctx, senderID, msg.ChatID, msg.Seq); err != nil {
+		log.Printf("[send_service] mark sender message read failed: uid=%s chat_id=%s msg_id=%s seq=%d err=%v", senderID, msg.ChatID, msg.MsgID, msg.Seq, err)
+	}
 }
 
 func (s *MessageService) findSenderMailbox(ctx context.Context, uid, chatID, msgID string) (*model.UserMailbox, error) {

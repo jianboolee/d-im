@@ -56,14 +56,46 @@ func (s *ConversationService) CreateOrGetSingle(ctx context.Context, uid, peerUs
 	return s.convMgr.FindByUIDAndChatID(ctx, uid, chat.ChatID)
 }
 
-// SetTop 设置置顶
-func (s *ConversationService) SetTop(ctx context.Context, uid, chatID string, isTop bool) error {
-	return s.convMgr.SetTop(ctx, uid, chatID, isTop)
+// SetTop 设置置顶。
+func (s *ConversationService) SetTop(ctx context.Context, uid, conversationID string, isTop bool) (*model.Conversation, error) {
+	conv, err := s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.convMgr.SetTop(ctx, uid, conv.ChatID, isTop); err != nil {
+		return nil, err
+	}
+	return s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
 }
 
-// SetMuted 设置免打扰
-func (s *ConversationService) SetMuted(ctx context.Context, uid, chatID string, isMuted bool) error {
-	return s.convMgr.SetMuted(ctx, uid, chatID, isMuted)
+// SetMuted 设置免打扰。
+func (s *ConversationService) SetMuted(ctx context.Context, uid, conversationID string, isMuted bool) (*model.Conversation, error) {
+	conv, err := s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.convMgr.SetMuted(ctx, uid, conv.ChatID, isMuted); err != nil {
+		return nil, err
+	}
+	return s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
+}
+
+func (s *ConversationService) UpdateSettings(ctx context.Context, uid, conversationID string, pinned, muted *bool) (*model.Conversation, error) {
+	conv, err := s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if pinned != nil {
+		if err := s.convMgr.SetTop(ctx, uid, conv.ChatID, *pinned); err != nil {
+			return nil, err
+		}
+	}
+	if muted != nil {
+		if err := s.convMgr.SetMuted(ctx, uid, conv.ChatID, *muted); err != nil {
+			return nil, err
+		}
+	}
+	return s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
 }
 
 // ReadConversation 标记某会话已读。lastReadSeq 为 0 时使用会话当前最新消息序列。

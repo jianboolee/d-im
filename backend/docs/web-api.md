@@ -883,8 +883,61 @@ Content-Type: application/json
 - 后端只在 `last_read_sequence` 前进时更新当前用户在该会话中的 `last_read_seq` 和 `last_read_at`，不回退。
 - read 接口必须幂等：重复上报、网络重试、乱序旧请求都不能产生副作用或倒退。
 - 后端不维护、不返回权威 `unread_count`。
+- 发送者自己的新消息在发送成功后必须推进当前用户会话的 `last_read_sequence` 到该消息 `sequence`，自己发送的消息不能算作自己的未读。
 - web 应上报当前已经展示的最大 message `sequence`，并用节流队列合并上报；切换会话、页面隐藏或卸载前需要 flush，保证最后一个最大 sequence 不丢。
 - web 未读徽标由 `last_message.sequence > last_read_sequence` 推导；持久已读状态以 `last_read_sequence` 为准。
+
+### 更新会话设置
+
+用于更新当前登录用户视角下的会话增强设置。
+
+```http
+PATCH /api/v1/conversations/{conversation_id}/settings
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "pinned": true,
+  "muted": false
+}
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": "conv_001",
+    "conversation_id": "conv_001",
+    "chat_id": "chat_001",
+    "chat_type": "single",
+    "title": "Bob",
+    "avatar": "",
+    "participants": ["u_001", "u_002"],
+    "peer_user": null,
+    "group": null,
+    "last_message": null,
+    "last_read_sequence": 0,
+    "muted": false,
+    "pinned": true,
+    "created_at": "2026-07-05T12:00:00Z",
+    "updated_at": "2026-07-05T12:00:00Z",
+    "last_activity_at": "2026-07-05T12:00:00Z"
+  },
+  "error": ""
+}
+```
+
+规则：
+
+- `pinned` 和 `muted` 至少提供一个。
+- 设置只影响当前登录用户自己的 conversation 视图，不影响同一 chat 下其它用户。
+- 响应返回完整 ConversationDTO，字段保持平铺，不返回 `state`。
 
 ## 消息接口
 
@@ -1023,6 +1076,52 @@ Authorization: Bearer <access_token>
 - cursor 基于 `messages.seq`，即 chat 维度消息序列。
 - 发送消息时需要同时写入发送者和接收者 mailbox，保证用户级同步流水完整。
 - 如果后续需要向后同步新消息，可单独增加 `after_sequence` 或 `since_sequence`，不要混用含义不清的 cursor。
+
+### 搜索会话内消息
+
+用于在当前登录用户自己的某个会话内搜索历史消息。接口仍按 web 可见的 `conversation_id` 定位会话，后端验证当前用户拥有该 conversation 后，再使用内部 `chat_id` 查询 `messages`。
+
+```http
+GET /api/v1/conversations/{conversation_id}/messages/search?q=hello&limit=20&cursor=
+Authorization: Bearer <access_token>
+```
+
+响应结构与历史消息一致：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "message_id": "msg_001",
+        "conversation_id": "conv_001",
+        "chat_id": "chat_001",
+        "chat_type": "single",
+        "sender_id": "u_001",
+        "message_type": "text",
+        "content": {
+          "text": "hello"
+        },
+        "content_preview": "hello",
+        "status": "sent",
+        "sequence": 1001,
+        "created_at": "2026-07-05T12:34:57Z"
+      }
+    ],
+    "next_cursor": "",
+    "has_more": false
+  },
+  "error": ""
+}
+```
+
+规则：
+
+- `q` 必填，后端会 trim 空白。
+- 当前简单搜索先基于 `content_preview` 做会话内匹配，可覆盖文本、文件名、卡片标题、链接标题等已进入预览文本的内容。
+- cursor 仍基于 `messages.seq`，用于继续向更早搜索结果翻页。
+- `items` 内部按时间正序排列，旧消息在前，新消息在后。
 
 ## WebSocket
 
@@ -1386,10 +1485,10 @@ Connector 推送消息：
 
 建议顺序：
 
-1. 置顶。
-2. 免打扰。
+1. 置顶：已落地 `PATCH /api/v1/conversations/{conversation_id}/settings`。
+2. 免打扰：已落地 `PATCH /api/v1/conversations/{conversation_id}/settings`。
 3. 会话搜索。
-4. 消息搜索。
+4. 消息搜索：已落地会话内搜索 `GET /api/v1/conversations/{conversation_id}/messages/search`。
 5. 消息撤回。
 6. 消息转发。
 

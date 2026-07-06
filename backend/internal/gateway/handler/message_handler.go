@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	convSvc "d-im/internal/conversation/service"
@@ -189,6 +190,65 @@ func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http
 	}
 
 	messages, nextCursor, hasMore, err := h.messageService.GetHistory(r.Context(), uid, conv.ChatID, limit, r.URL.Query().Get("cursor"))
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
+		return
+	}
+
+	items := make([]messageDTO, 0, len(messages))
+	for i := len(messages) - 1; i >= 0; i-- {
+		items = append(items, h.messageDTO(r.Context(), messages[i], nil, conv))
+	}
+
+	writeAPISuccess(w, map[string]interface{}{
+		"items":       items,
+		"next_cursor": nextCursor,
+		"has_more":    hasMore,
+	})
+}
+
+// SearchConversationMessages 搜索会话内历史消息。
+// GET /api/v1/conversations/{conversation_id}/messages/search?q=hello&limit=20&cursor=
+func (h *MessageHandler) SearchConversationMessages(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.GetUserID(r.Context())
+	if uid == "" {
+		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		return
+	}
+
+	conversationID := r.PathValue("id")
+	if conversationID == "" {
+		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		return
+	}
+
+	keyword := strings.TrimSpace(r.URL.Query().Get("q"))
+	if keyword == "" {
+		writeAPIError(w, http.StatusBadRequest, 400014, "q is required")
+		return
+	}
+
+	conv, err := h.convSvc.GetConversation(r.Context(), uid, conversationID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		return
+	}
+
+	limit := int64(20)
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
+		if err != nil || parsed <= 0 {
+			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			return
+		}
+		limit = parsed
+	}
+
+	messages, nextCursor, hasMore, err := h.messageService.SearchHistory(r.Context(), uid, conv.ChatID, keyword, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
 		return

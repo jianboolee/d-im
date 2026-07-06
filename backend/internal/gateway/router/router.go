@@ -45,7 +45,9 @@ func NewRouter(
 	protected.HandleFunc("POST /api/v1/conversations/single", convHandler.CreateSingleConversation)
 	protected.HandleFunc("GET /api/v1/conversations/{id}", convHandler.GetConversation)
 	protected.HandleFunc("POST /api/v1/conversations/{id}/read", convHandler.ReadConversation)
+	protected.HandleFunc("PATCH /api/v1/conversations/{id}/settings", convHandler.UpdateConversationSettings)
 	protected.HandleFunc("GET /api/v1/conversations/{id}/messages", messageHandler.ListConversationMessages)
+	protected.HandleFunc("GET /api/v1/conversations/{id}/messages/search", messageHandler.SearchConversationMessages)
 	protected.HandleFunc("GET /api/v1/users/me", userHandler.GetMe)
 	protected.HandleFunc("GET /api/v1/users/{id}", userHandler.GetUser)
 
