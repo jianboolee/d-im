@@ -76,18 +76,19 @@ func main() {
 	}
 	defer natsPub.Close()
 
-	chatMgr := model.NewChatIDManager(db)
+	chatMgr := model.NewChatIDManager(db, idGen)
 	msgRepo := repository.NewMessageRepo(db)
-	convMgr := model.NewConversationManager(db)
+	convMgr := model.NewConversationManager(db, idGen)
 	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, convMgr, natsPub)
 
-	conversationSvc := convSvc.NewConversationService(convMgr)
-	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL)
-	messageHandler := handler.NewMessageHandler(msgSvc)
-	convHandler := handler.NewConversationHandler(conversationSvc)
+	conversationSvc := convSvc.NewConversationService(convMgr, chatMgr)
 	uRepo := userRepo.NewUserRepo(db)
+	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
+	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
+	convHandler := handler.NewConversationHandler(conversationSvc, chatMgr, uRepo)
+	userHandler := handler.NewUserHandler(uRepo)
 	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, sdkHandler)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, userHandler, sdkHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

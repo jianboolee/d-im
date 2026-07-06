@@ -14,6 +14,7 @@ func NewRouter(
 	authHandler *handler.AuthHandler,
 	messageHandler *handler.MessageHandler,
 	convHandler *handler.ConversationHandler,
+	userHandler *handler.UserHandler,
 	sdkHandler *handler.SDKHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -26,7 +27,6 @@ func NewRouter(
 
 	mux.HandleFunc("POST /api/v1/auth/ticket", authHandler.IssueTicket)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
-	mux.HandleFunc("POST /api/v1/auth/token", authHandler.ExchangeToken)
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.RefreshToken)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
 	mux.HandleFunc("POST /api/v1/auth/session", authHandler.CreateSession)
@@ -37,12 +37,17 @@ func NewRouter(
 
 	// ---- 受保护的路由（需要 JWT access_token）----
 	protected := http.NewServeMux()
-	protected.HandleFunc("POST /api/v1/message/send", messageHandler.SendMessage)
+	protected.HandleFunc("POST /api/v1/messages", messageHandler.SendMessage)
 	protected.HandleFunc("POST /api/v1/message/recall", messageHandler.RecallMessage)
 	protected.HandleFunc("POST /api/v1/message/forward", messageHandler.ForwardMessage)
 	protected.HandleFunc("GET /api/v1/message/list", messageHandler.ListMessages)
-	protected.HandleFunc("GET /api/v1/conversation/list", convHandler.ListConversations)
-	protected.HandleFunc("POST /api/v1/conversation/read", convHandler.ReadConversation)
+	protected.HandleFunc("GET /api/v1/conversations", convHandler.ListConversations)
+	protected.HandleFunc("POST /api/v1/conversations/single", convHandler.CreateSingleConversation)
+	protected.HandleFunc("GET /api/v1/conversations/{id}", convHandler.GetConversation)
+	protected.HandleFunc("POST /api/v1/conversations/{id}/read", convHandler.ReadConversation)
+	protected.HandleFunc("GET /api/v1/conversations/{id}/messages", messageHandler.ListConversationMessages)
+	protected.HandleFunc("GET /api/v1/users/me", userHandler.GetMe)
+	protected.HandleFunc("GET /api/v1/users/{id}", userHandler.GetUser)
 
 	rateLimiter := middleware.NewRateLimiter(100, 200)
 	protectedHandler := middleware.RecoveryMiddleware(protected)
@@ -51,7 +56,10 @@ func NewRouter(
 	protectedHandler = middleware.RateLimitMiddleware(rateLimiter)(protectedHandler)
 
 	mux.Handle("/api/v1/message/", protectedHandler)
-	mux.Handle("/api/v1/conversation/", protectedHandler)
+	mux.Handle("/api/v1/messages", protectedHandler)
+	mux.Handle("/api/v1/conversations", protectedHandler)
+	mux.Handle("/api/v1/conversations/", protectedHandler)
+	mux.Handle("/api/v1/users/", protectedHandler)
 
 	return mux
 }

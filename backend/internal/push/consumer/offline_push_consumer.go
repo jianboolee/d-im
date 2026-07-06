@@ -8,9 +8,28 @@ import (
 
 	"d-im/internal/push/service"
 	"d-im/pkg/model"
+	"d-im/pkg/types"
 
 	"github.com/nats-io/nats.go"
 )
+
+type messageEnvelope struct {
+	Type string `json:"type"`
+	Data struct {
+		Message messageDTO `json:"message"`
+	} `json:"data"`
+}
+
+type messageDTO struct {
+	MessageID       string                 `json:"message_id"`
+	ConversationID  string                 `json:"conversation_id"`
+	ChatID          string                 `json:"chat_id"`
+	SenderID        string                 `json:"sender_id"`
+	MessageType     string                 `json:"message_type"`
+	Content         map[string]interface{} `json:"content"`
+	ContentPreview  string                 `json:"content_preview"`
+	ClientMessageID string                 `json:"client_message_id"`
+}
 
 // OfflinePushConsumer 离线推送消费者
 type OfflinePushConsumer struct {
@@ -32,11 +51,24 @@ func (c *OfflinePushConsumer) Start() error {
 		}
 		targetUID := parts[3]
 
-		var m model.Message
-		if err := json.Unmarshal(msg.Data, &m); err != nil {
+		var envelope messageEnvelope
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
 			log.Printf("[offline_push] unmarshal failed: %v", err)
 			return
 		}
+		if envelope.Type != "message" {
+			return
+		}
+		m := model.Message{
+			MsgID:          envelope.Data.Message.MessageID,
+			ChatID:         envelope.Data.Message.ChatID,
+			ClientMsgID:    envelope.Data.Message.ClientMessageID,
+			SenderID:       envelope.Data.Message.SenderID,
+			MsgType:        types.MessageType(envelope.Data.Message.MessageType),
+			Content:        envelope.Data.Message.Content,
+			ContentPreview: envelope.Data.Message.ContentPreview,
+		}
+		m.NormalizeContent()
 
 		if err := c.pushSvc.PushByMessage(context.Background(), targetUID, &m); err != nil {
 			log.Printf("[offline_push] push failed: uid=%s err=%v", targetUID, err)

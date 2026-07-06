@@ -23,7 +23,7 @@ func (s *MessageService) Recall(ctx context.Context, req *RecallMessageReq) erro
 
 	// 2. 权限校验：只有发送者才能撤回
 	// TODO: 群聊中管理员也可以撤回
-	if msg.FromUID != req.UserID {
+	if msg.SenderID != req.UserID {
 		return fmt.Errorf("only message sender can recall")
 	}
 

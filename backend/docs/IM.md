@@ -282,8 +282,8 @@ type Message struct {
     ChatType     types.ChatType      `bson:"chat_type" json:"chat_type"`     // 会话类型
     
     // 发送者信息
-    FromUID      string              `bson:"from_uid" json:"from_uid"`       // 发送者UID
-    FromName     string              `bson:"from_name,omitempty" json:"from_name,omitempty"` // 发送者名称(冗余)
+    SenderID      string              `bson:"sender_id" json:"sender_id"`       // 发送者UID
+    SenderName     string              `bson:"sender_name,omitempty" json:"sender_name,omitempty"` // 发送者名称(冗余)
     
     // 消息类型和内容
     MsgType      types.MessageType   `bson:"msg_type" json:"msg_type"`       // 消息类型
@@ -319,8 +319,8 @@ type Message struct {
 // QuoteMessage 引用消息摘要
 type QuoteMessage struct {
     MsgID       string            `bson:"msg_id" json:"msg_id"`
-    FromUID     string            `bson:"from_uid" json:"from_uid"`
-    FromName    string            `bson:"from_name" json:"from_name"`
+    SenderID     string            `bson:"sender_id" json:"sender_id"`
+    SenderName    string            `bson:"sender_name" json:"sender_name"`
     MsgType     types.MessageType `bson:"msg_type" json:"msg_type"`
     ContentPreview string         `bson:"content_preview" json:"content_preview"` // 内容预览
 }
@@ -331,7 +331,7 @@ type MessageIndex struct {
     MsgID        string             `bson:"msg_id"`
     ChatID       string             `bson:"chat_id"`
     ChatType     types.ChatType     `bson:"chat_type"`
-    FromUID      string             `bson:"from_uid"`
+    SenderID      string             `bson:"sender_id"`
     MsgType      types.MessageType  `bson:"msg_type"`
     ClientTime   time.Time          `bson:"client_time"`
     CreatedAt    time.Time          `bson:"created_at"`
@@ -381,7 +381,7 @@ type Conversation struct {
 // LastMessage 最后一条消息摘要
 type LastMessage struct {
     MsgID           string              `bson:"msg_id" json:"msg_id"`
-    FromUID         string              `bson:"from_uid" json:"from_uid"`
+    SenderID         string              `bson:"sender_id" json:"sender_id"`
     MsgType         types.MessageType   `bson:"msg_type" json:"msg_type"`
     ContentPreview  string              `bson:"content_preview" json:"content_preview"` // 内容摘要
     ClientTime      time.Time           `bson:"client_time" json:"client_time"`
@@ -468,10 +468,10 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
         },
         {
             Keys: bson.D{
-                {Key: "from_uid", Value: 1},
+                {Key: "sender_id", Value: 1},
                 {Key: "created_at", Value: -1},
             },
-            Options: options.Index().SetName("idx_from_uid_time"),
+            Options: options.Index().SetName("idx_sender_id_time"),
         },
         {
             Keys: bson.D{
@@ -556,8 +556,8 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
   "msg_id": "msg_123456789",
   "chat_id": "chat_user1_user2",
   "chat_type": "single",
-  "from_uid": "user_001",
-  "from_name": "张三",
+  "sender_id": "user_001",
+  "sender_name": "张三",
   "msg_type": "text",
   "content": {
     "text": "你好，今天开会吗？",
@@ -578,8 +578,8 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
   "msg_id": "msg_987654321",
   "chat_id": "group_order_123",
   "chat_type": "group",
-  "from_uid": "system_bot",
-  "from_name": "订单助手",
+  "sender_id": "system_bot",
+  "sender_name": "订单助手",
   "msg_type": "template",
   "content": {
     "template_id": "tpl_order_status",

@@ -66,7 +66,7 @@ func main() {
 		_, err := apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
 			"chat_id":     chatID,
 			"chat_type":   "single",
-			"from_name":   t.from,
+			"sender_name": t.from,
 			"msg_type":    "text",
 			"content":     map[string]string{"text": t.text},
 			"target_uids": []string{t.to},
@@ -84,7 +84,7 @@ func main() {
 	_, err = apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
 		"chat_id":     cardChatID,
 		"chat_type":   "single",
-		"from_name":   "客服小王",
+		"sender_name": "客服小王",
 		"msg_type":    "card",
 		"content":     map[string]string{"title": "夏季新款连衣裙", "description": "限时优惠 ¥299", "image_url": "https://oss.21rv.com/uploads/product/1.jpg", "action_url": "https://shop.example.com/item/123"},
 		"target_uids": []string{"user_a"},
@@ -100,7 +100,7 @@ func main() {
 	_, err = apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
 		"chat_id":     cardChatID,
 		"chat_type":   "single",
-		"from_name":   "客服小王",
+		"sender_name": "客服小王",
 		"msg_type":    "link",
 		"content":     map[string]string{"url": "https://example.com/promo", "title": "全场满200减30", "description": "618 年中大促，全场商品参与活动"},
 		"target_uids": []string{"user_a"},

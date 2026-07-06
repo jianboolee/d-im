@@ -798,7 +798,7 @@ func (s *PushService) PushByMessage(ctx context.Context, userID string, msg *Pus
     }
     
     // 4. 构建推送内容
-    title, body := s.contentBuilder.BuildPushContent(msg.MsgType, msg.Content, msg.FromName)
+    title, body := s.contentBuilder.BuildPushContent(msg.MsgType, msg.Content, msg.SenderName)
     
     // 5. 构建扩展数据（点击推送跳转到对应会话）
     extra := map[string]interface{}{

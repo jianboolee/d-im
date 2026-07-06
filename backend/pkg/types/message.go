@@ -48,8 +48,8 @@ type ContentType interface {
 // QuoteMessage 引用消息摘要
 type QuoteMessage struct {
 	MsgID          string      `bson:"msg_id" json:"msg_id"`
-	FromUID        string      `bson:"from_uid" json:"from_uid"`
-	FromName       string      `bson:"from_name" json:"from_name"`
+	SenderID       string      `bson:"sender_id" json:"sender_id"`
+	SenderName     string      `bson:"sender_name" json:"sender_name"`
 	MsgType        MessageType `bson:"msg_type" json:"msg_type"`
 	ContentPreview string      `bson:"content_preview" json:"content_preview"`
 }
@@ -57,7 +57,8 @@ type QuoteMessage struct {
 // LastMessage 最后一条消息摘要
 type LastMessage struct {
 	MsgID          string      `bson:"msg_id" json:"msg_id"`
-	FromUID        string      `bson:"from_uid" json:"from_uid"`
+	Seq            int64       `bson:"seq" json:"sequence"`
+	SenderID       string      `bson:"sender_id" json:"sender_id"`
 	MsgType        MessageType `bson:"msg_type" json:"msg_type"`
 	ContentPreview string      `bson:"content_preview" json:"content_preview"`
 	ClientTime     time.Time   `bson:"client_time" json:"client_time"`

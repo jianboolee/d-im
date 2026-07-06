@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
@@ -29,5 +31,10 @@ func NewMessageService(repo *repository.MessageRepo, idGen *snowflake.Generator,
 
 // GenerateMsgID 生成消息ID
 func (s *MessageService) GenerateMsgID() string {
-	return s.idGen.GenerateString()
+	return "msg_" + s.idGen.GenerateString()
+}
+
+// GetHistory 获取会话历史消息页，返回值为新到旧顺序。
+func (s *MessageService) GetHistory(ctx context.Context, uid, chatID string, limit int64, cursor string) ([]*model.Message, string, bool, error) {
+	return s.repo.FindPageByChatSeq(ctx, chatID, limit, cursor)
 }

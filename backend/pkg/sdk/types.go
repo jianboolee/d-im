@@ -15,8 +15,8 @@ type SyncUserResp struct {
 
 // SendMessageReq 发送消息请求
 type SendMessageReq struct {
-	FromUID    string      `json:"from_uid"`
-	FromName   string      `json:"from_name,omitempty"`
+	SenderID   string      `json:"sender_id"`
+	SenderName string      `json:"sender_name,omitempty"`
 	ChatID     string      `json:"chat_id"`
 	ChatType   string      `json:"chat_type"` // single / group
 	MsgType    string      `json:"msg_type"`  // text / image / ...

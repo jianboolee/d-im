@@ -21,16 +21,44 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 		},
 		{
 			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "seq", Value: -1},
+			},
+			Options: options.Index().SetName("idx_chat_seq"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "seq", Value: 1},
+			},
+			Options: options.Index().
+				SetName("idx_chat_seq_unique").
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{"seq": bson.M{"$exists": true}}),
+		},
+		{
+			Keys: bson.D{
 				{Key: "msg_id", Value: 1},
 			},
 			Options: options.Index().SetName("idx_msg_id").SetUnique(true),
 		},
 		{
 			Keys: bson.D{
-				{Key: "from_uid", Value: 1},
+				{Key: "chat_id", Value: 1},
+				{Key: "sender_id", Value: 1},
+				{Key: "client_message_id", Value: 1},
+			},
+			Options: options.Index().
+				SetName("idx_client_message_id").
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{"client_message_id": bson.M{"$exists": true}}),
+		},
+		{
+			Keys: bson.D{
+				{Key: "sender_id", Value: 1},
 				{Key: "created_at", Value: -1},
 			},
-			Options: options.Index().SetName("idx_from_uid_time"),
+			Options: options.Index().SetName("idx_sender_id_time"),
 		},
 		{
 			Keys: bson.D{
@@ -53,6 +81,12 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 
 	// Conversations集合索引
 	conversationIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "conversation_id", Value: 1},
+			},
+			Options: options.Index().SetName("idx_conversation_id").SetUnique(true),
+		},
 		{
 			Keys: bson.D{
 				{Key: "uid", Value: 1},
@@ -93,6 +127,14 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 		{
 			Keys: bson.D{
 				{Key: "uid", Value: 1},
+				{Key: "chat_id", Value: 1},
+				{Key: "message_seq", Value: -1},
+			},
+			Options: options.Index().SetName("idx_uid_chat_message_seq"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
 				{Key: "status", Value: 1},
 			},
 			Options: options.Index().SetName("idx_uid_status"),
@@ -110,6 +152,16 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 				{Key: "chat_id", Value: 1},
 			},
 			Options: options.Index().SetName("idx_chat_id").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "chat_type", Value: 1},
+				{Key: "single_key", Value: 1},
+			},
+			Options: options.Index().
+				SetName("idx_single_key").
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{"single_key": bson.M{"$exists": true}}),
 		},
 		{
 			Keys:    bson.D{{Key: "members", Value: 1}},

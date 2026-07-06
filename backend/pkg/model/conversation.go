@@ -10,10 +10,11 @@ import (
 
 // Conversation 会话模型 - 最新消息摘要（用户维度的会话视图）
 type Conversation struct {
-	ID       primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UID      string             `bson:"uid" json:"uid"`
-	ChatID   string             `bson:"chat_id" json:"chat_id"`
-	ChatType types.ChatType     `bson:"chat_type" json:"chat_type"`
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	ConversationID string             `bson:"conversation_id" json:"conversation_id"`
+	UID            string             `bson:"uid" json:"uid"`
+	ChatID         string             `bson:"chat_id" json:"chat_id"`
+	ChatType       types.ChatType     `bson:"chat_type" json:"chat_type"`
 
 	// 用户个性化设置
 	IsTop      bool   `bson:"is_top" json:"is_top"`
@@ -23,6 +24,7 @@ type Conversation struct {
 
 	// 用户维度的消息状态
 	LastReadSeq int64              `bson:"last_read_seq" json:"last_read_seq"`
+	LastReadAt  *time.Time         `bson:"last_read_at,omitempty" json:"last_read_at,omitempty"`
 	UnreadCount int                `bson:"unread_count" json:"unread_count"`
 	LastMsg     *types.LastMessage `bson:"last_msg,omitempty" json:"last_msg,omitempty"`
 
@@ -36,12 +38,13 @@ type Conversation struct {
 
 // UserMailbox 用户消息信箱 - 用于消息分发和同步
 type UserMailbox struct {
-	ID        primitive.ObjectID  `bson:"_id,omitempty"`
-	UID       string              `bson:"uid"`
-	ChatID    string              `bson:"chat_id"`
-	MsgID     string              `bson:"msg_id"`
-	SeqID     int64               `bson:"seq_id"` // 消息序列号(用于多端同步)
-	Status    types.MessageStatus `bson:"status"`
-	ReadAt    *time.Time          `bson:"read_at,omitempty"`
-	CreatedAt time.Time           `bson:"created_at"`
+	ID         primitive.ObjectID  `bson:"_id,omitempty"`
+	UID        string              `bson:"uid"`
+	ChatID     string              `bson:"chat_id"`
+	MsgID      string              `bson:"msg_id"`
+	MessageSeq int64               `bson:"message_seq"`
+	SeqID      int64               `bson:"seq_id"` // 用户维度同步流水序号
+	Status     types.MessageStatus `bson:"status"`
+	ReadAt     *time.Time          `bson:"read_at,omitempty"`
+	CreatedAt  time.Time           `bson:"created_at"`
 }

@@ -214,7 +214,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
     event := &MessageSendEvent{
         MsgID:      h.idGen.Generate(),
         ChatID:     req.ChatID,
-        FromUID:    userID,
+        SenderID:    userID,
         MsgType:    req.MsgType,
         Content:    req.Content,
         ClientTime: time.Now(),
@@ -262,8 +262,8 @@ func (s *MessageService) StartMessageProcessor(ctx context.Context) error {
         pushEvent := &PushMessageEvent{
             MsgID:    message.MsgID,
             ChatID:   message.ChatID,
-            FromUID:  message.FromUID,
-            FromName: message.FromName,
+            SenderID:  message.SenderID,
+            SenderName: message.SenderName,
             MsgType:  message.MsgType,
             Content:  message.Content,
         }
@@ -273,7 +273,7 @@ func (s *MessageService) StartMessageProcessor(ctx context.Context) error {
         
         // 给每个成员推送消息
         for _, memberUID := range members {
-            if memberUID == message.FromUID {
+            if memberUID == message.SenderID {
                 continue // 不推送给发送者自己
             }
             
@@ -301,7 +301,7 @@ func (s *MessageService) StartMessageProcessor(ctx context.Context) error {
         // 5. 发布异步任务 - 消息统计
         s.nats.PublishMessage(ctx, nats.SubjectTaskMessageStat, &MessageStatTask{
             ChatID:   message.ChatID,
-            FromUID:  message.FromUID,
+            SenderID:  message.SenderID,
             MsgType:  message.MsgType,
             Time:     time.Now(),
         })

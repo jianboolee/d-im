@@ -55,14 +55,16 @@ func (s *Server) Start(ctx context.Context) error {
 
 // handleConnection 处理WebSocket连接
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
+	token := r.URL.Query().Get("access_token")
 	if token == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
+		log.Printf("[websocket] auth failed: missing access_token remote=%s path=%s", r.RemoteAddr, r.URL.String())
+		http.Error(w, "missing access_token", http.StatusUnauthorized)
 		return
 	}
 
 	uid, err := s.authFunc(token)
 	if err != nil {
+		log.Printf("[websocket] auth failed: %v remote=%s", err, r.RemoteAddr)
 		http.Error(w, "auth failed: "+err.Error(), http.StatusUnauthorized)
 		return
 	}

@@ -3,13 +3,16 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"time"
 )
 
 // Packet WebSocket通信数据包
 type Packet struct {
-	Type    string          `json:"type"`    // 消息类型: message, ack, heartbeat, sync
-	Payload json.RawMessage `json:"payload"` // 消息体
-	SeqID   int64           `json:"seq_id,omitempty"`
+	Type       string          `json:"type"`                  // 消息类型: message, ack, ping, sync
+	Payload    json.RawMessage `json:"payload,omitempty"`     // 消息体
+	SeqID      int64           `json:"seq_id,omitempty"`      // 连接内包序号
+	ClientTime int64           `json:"client_time,omitempty"` // 客户端毫秒时间戳
+	ServerTime int64           `json:"server_time,omitempty"` // 服务端毫秒时间戳
 }
 
 // AckPacket 消息确认包
@@ -31,8 +34,8 @@ func DefaultHandler(client *Client, message []byte) {
 		handleMessagePacket(client, packet)
 	case "ack":
 		handleAckPacket(client, packet)
-	case "heartbeat":
-		handleHeartbeatPacket(client, packet)
+	case "ping":
+		handlePingPacket(client, packet)
 	case "sync":
 		handleSyncPacket(client, packet)
 	default:
@@ -55,11 +58,11 @@ func handleAckPacket(client *Client, packet Packet) {
 	log.Printf("[ws] ack from uid=%s, msg_id=%s, status=%s", client.UID, ack.MsgID, ack.Status)
 }
 
-func handleHeartbeatPacket(client *Client, packet Packet) {
-	// 回应心跳
+func handlePingPacket(client *Client, packet Packet) {
 	resp := Packet{
-		Type:  "heartbeat_resp",
-		SeqID: packet.SeqID,
+		Type:       "pong",
+		SeqID:      packet.SeqID,
+		ServerTime: time.Now().UnixMilli(),
 	}
 	data, _ := json.Marshal(resp)
 	client.Send(data)

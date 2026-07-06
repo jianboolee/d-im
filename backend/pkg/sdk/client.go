@@ -36,19 +36,23 @@ type TokenPair struct {
 }
 
 // GetSession 为指定用户创建 API Session（使用 API Key 换取 JWT）
-func (c *Client) GetSession(uid string) (*TokenPair, error) {
+func (c *Client) GetSession(id string) (*TokenPair, error) {
 	respBody, err := c.do("POST", "/api/v1/auth/session", map[string]string{
-		"uid": uid,
+		"id": id,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	var pair TokenPair
-	if err := json.Unmarshal(respBody, &pair); err != nil {
+	var resp struct {
+		Code  int       `json:"code"`
+		Data  TokenPair `json:"data"`
+		Error string    `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal session: %w", err)
 	}
-	return &pair, nil
+	return &resp.Data, nil
 }
 
 // do 执行 API 请求

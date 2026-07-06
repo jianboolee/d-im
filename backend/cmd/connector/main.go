@@ -53,7 +53,7 @@ func main() {
 	// WebSocket server
 	addr := fmt.Sprintf(":%d", cfg.Server.Connector.WSPort)
 	server := ws.NewServer(addr, func(token string) (string, error) {
-		return jwtMgr.Verify(token)
+		return jwtMgr.VerifyAs(token, crypto.TokenTypeAccess)
 	})
 	server.GetManager().SetMessageHandler(ws.DefaultHandler)
 

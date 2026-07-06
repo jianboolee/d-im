@@ -50,12 +50,12 @@ func main() {
 	}
 
 	// 4. 初始化
-	chatMgr := model.NewChatIDManager(db)
+	chatMgr := model.NewChatIDManager(db, idGen)
 	msgRepo := repository.NewMessageRepo(db)
 	msgSvc := service.NewMessageService(msgRepo, idGen, chatMgr, nil, nil)
 
 	// 5. 启动分发器
-	d := dispatcher.NewDispatcher(msgRepo, 4)
+	d := dispatcher.NewDispatcher(msgRepo, idGen, 4)
 	d.Start(ctx)
 
 	log.Printf("[message] started, msg_svc=%v", msgSvc != nil)

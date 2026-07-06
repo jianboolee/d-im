@@ -29,7 +29,7 @@ func (s *PushService) PushByMessage(ctx context.Context, userID string, msg *mod
 		return err
 	}
 
-	title, body := s.builder.BuildPushContent(msg.MsgType, msg.Content, msg.FromName)
+	title, body := s.builder.BuildPushContent(msg.MsgType, msg.Content, msg.SenderName)
 
 	req := &provider.PushRequest{
 		Platform: provider.PlatformWeb,

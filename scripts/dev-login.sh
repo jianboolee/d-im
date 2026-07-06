@@ -1,18 +1,18 @@
 #!/bin/bash
 # 调试登录脚本 — 调用后端 ticket 接口，打印可在浏览器打开的 URL
-# 用法: ./scripts/dev-login.sh [uid]
+# 用法: ./scripts/dev-login.sh [id]
 
 set -e
 
-UID="${1:-user_001}"
+USER_ID="${1:-user_001}"
 API_KEY="${JWT_API_KEY:-${IM_API_KEY:-im-api-key-change-me}}"
 BASE="${IM_BASE:-http://localhost:8080}"
 
-echo "→ 请求 ticket (UID=$UID, API_KEY=${API_KEY:0:8}...)"
+echo "→ 请求 ticket (ID=$USER_ID, API_KEY=${API_KEY:0:8}...)"
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE/api/v1/auth/ticket" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"uid\": \"$UID\"}") || {
+  -d "{\"id\": \"$USER_ID\"}") || {
   echo "❌ 无法连接后端 ($BASE)，请确认 gateway 已启动"
   exit 1
 }
@@ -36,7 +36,7 @@ fi
 FRONTEND="http://localhost:5173${REDIRECT}"
 echo ""
 echo "====================================="
-echo "  UID:     $UID"
+echo "  ID:      $USER_ID"
 echo "  Ticket:  ${TICKET:0:40}..."
 echo "====================================="
 echo ""

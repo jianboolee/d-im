@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"d-im/pkg/model"
+	"d-im/pkg/snowflake"
 
 	"d-im/internal/message/repository"
 )
@@ -13,6 +14,7 @@ import (
 // Dispatcher 消息分发器
 type Dispatcher struct {
 	repo    *repository.MessageRepo
+	idGen   *snowflake.Generator
 	workers int
 	queue   chan *dispatchTask
 	wg      sync.WaitGroup
@@ -24,12 +26,13 @@ type dispatchTask struct {
 }
 
 // NewDispatcher 创建分发器
-func NewDispatcher(repo *repository.MessageRepo, workers int) *Dispatcher {
+func NewDispatcher(repo *repository.MessageRepo, idGen *snowflake.Generator, workers int) *Dispatcher {
 	if workers <= 0 {
 		workers = 4
 	}
 	return &Dispatcher{
 		repo:    repo,
+		idGen:   idGen,
 		workers: workers,
 		queue:   make(chan *dispatchTask, 1024),
 	}
@@ -73,10 +76,12 @@ func (d *Dispatcher) worker(ctx context.Context, id int) {
 		mailboxes := make([]*model.UserMailbox, len(task.TargetUIDs))
 		for i, uid := range task.TargetUIDs {
 			mailboxes[i] = &model.UserMailbox{
-				UID:    uid,
-				ChatID: task.Msg.ChatID,
-				MsgID:  task.Msg.MsgID,
-				Status: task.Msg.Status,
+				UID:        uid,
+				ChatID:     task.Msg.ChatID,
+				MsgID:      task.Msg.MsgID,
+				MessageSeq: task.Msg.Seq,
+				SeqID:      d.idGen.Generate(),
+				Status:     task.Msg.Status,
 			}
 		}
 

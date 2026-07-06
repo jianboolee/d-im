@@ -12,8 +12,8 @@ type ForwardMessageReq struct {
 	SrcMsgID      string      `json:"src_msg_id"`      // 源消息ID
 	TargetChatIDs []string    `json:"target_chat_ids"` // 目标会话ID列表
 	TargetUIDs    []string    `json:"target_uids"`     // 目标用户UID列表（单聊时需要）
-	FromUID       string      `json:"from_uid"`        // 转发者UID
-	FromName      string      `json:"from_name"`       // 转发者名称
+	SenderID      string      `json:"sender_id"`       // 转发者UID
+	SenderName    string      `json:"sender_name"`     // 转发者名称
 	ClientTime    interface{} `json:"client_time"`     // 客户端时间
 }
 
@@ -53,8 +53,8 @@ func (s *MessageService) Forward(ctx context.Context, req *ForwardMessageReq) (*
 		sendReq := &SendMessageReq{
 			ChatID:     targetChatID,
 			ChatType:   srcMsg.ChatType,
-			FromUID:    req.FromUID,
-			FromName:   req.FromName,
+			SenderID:   req.SenderID,
+			SenderName: req.SenderName,
 			MsgType:    srcMsg.MsgType,
 			Content:    content,
 			ClientTime: srcMsg.ClientTime,

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"d-im/pkg/snowflake"
 	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -19,11 +20,13 @@ type Chat struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	ChatID      string             `bson:"chat_id" json:"chat_id"`
 	ChatType    types.ChatType     `bson:"chat_type" json:"chat_type"`
+	SingleKey   string             `bson:"single_key,omitempty" json:"single_key,omitempty"`
 	Name        string             `bson:"name,omitempty" json:"name,omitempty"`
 	Avatar      string             `bson:"avatar,omitempty" json:"avatar,omitempty"`
 	OwnerUID    string             `bson:"owner_uid,omitempty" json:"owner_uid,omitempty"`
 	Members     []string           `bson:"members,omitempty" json:"members,omitempty"`
 	MemberCount int                `bson:"member_count" json:"member_count"`
+	LastSeq     int64              `bson:"last_seq" json:"last_seq"`
 	CreatedBy   string             `bson:"created_by" json:"created_by"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
@@ -32,41 +35,60 @@ type Chat struct {
 // ChatIDManager ChatID管理器
 type ChatIDManager struct {
 	chatColl *mongo.Collection
+	idGen    *snowflake.Generator
 }
 
 // NewChatIDManager 创建ChatID管理器
-func NewChatIDManager(db *mongo.Database) *ChatIDManager {
+func NewChatIDManager(db *mongo.Database, idGen *snowflake.Generator) *ChatIDManager {
 	return &ChatIDManager{
 		chatColl: db.Collection("chats"),
+		idGen:    idGen,
 	}
 }
 
-// GenerateSingleChatID 生成单聊ID（幂等 - 两个用户之间始终相同）
+// GenerateSingleChatKey 生成单聊幂等键。它只用于唯一约束，不作为公开会话ID。
+func GenerateSingleChatKey(uid1, uid2 string) string {
+	uids := []string{uid1, uid2}
+	sort.Strings(uids)
+	return fmt.Sprintf("%s:%s", uids[0], uids[1])
+}
+
+// GenerateSingleChatID 保留给旧 demo/脚本兼容；真实创建逻辑不再为新会话使用语义化ID。
 func GenerateSingleChatID(uid1, uid2 string) string {
 	uids := []string{uid1, uid2}
 	sort.Strings(uids)
 	return fmt.Sprintf("single_%s_%s", uids[0], uids[1])
 }
 
-// GenerateGroupChatID 生成群聊ID
-func (m *ChatIDManager) GenerateGroupChatID() string {
-	return fmt.Sprintf("group_%d", time.Now().UnixNano())
+// GenerateChatID 生成不可语义化的会话实体ID。
+func (m *ChatIDManager) GenerateChatID() string {
+	return "chat_" + m.idGen.GenerateString()
 }
 
 // CreateOrGetSingleChat 获取或创建单聊会话
 func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*Chat, error) {
-	chatID := GenerateSingleChatID(uid1, uid2)
+	singleKey := GenerateSingleChatKey(uid1, uid2)
+	legacyChatID := GenerateSingleChatID(uid1, uid2)
+	chatID := m.GenerateChatID()
+	now := time.Now()
 
-	filter := bson.M{"chat_id": chatID}
+	filter := bson.M{"$or": bson.A{
+		bson.M{"chat_type": types.ChatTypeSingle, "single_key": singleKey},
+		bson.M{"chat_id": legacyChatID},
+	}}
 	update := bson.M{
 		"$setOnInsert": bson.M{
 			"chat_id":      chatID,
 			"chat_type":    types.ChatTypeSingle,
 			"members":      []string{uid1, uid2},
 			"member_count": 2,
-			"created_at":   time.Now(),
+			"last_seq":     0,
+			"created_at":   now,
 		},
-		"$set": bson.M{"updated_at": time.Now()},
+		"$set": bson.M{
+			"single_key": singleKey,
+			"updated_at": now,
+		},
 	}
 
 	opts := options.FindOneAndUpdate().
@@ -83,7 +105,7 @@ func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 st
 
 // CreateGroupChat 创建群聊
 func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerUID string, memberUIDs []string) (*Chat, error) {
-	chatID := m.GenerateGroupChatID()
+	chatID := m.GenerateChatID()
 
 	allMembers := append([]string{ownerUID}, memberUIDs...)
 	allMembers = uniqueStrings(allMembers)
@@ -96,6 +118,7 @@ func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerU
 		OwnerUID:    ownerUID,
 		Members:     allMembers,
 		MemberCount: len(allMembers),
+		LastSeq:     0,
 		CreatedBy:   ownerUID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -147,6 +170,23 @@ func (m *ChatIDManager) FindByChatID(ctx context.Context, chatID string) (*Chat,
 		return nil, err
 	}
 	return &chat, nil
+}
+
+// NextMessageSeq 为指定 chat 原子分配下一条消息序号。
+func (m *ChatIDManager) NextMessageSeq(ctx context.Context, chatID string) (int64, error) {
+	now := time.Now()
+	update := bson.M{
+		"$inc": bson.M{"last_seq": 1},
+		"$set": bson.M{"updated_at": now},
+	}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+	var chat Chat
+	err := m.chatColl.FindOneAndUpdate(ctx, bson.M{"chat_id": chatID}, update, opts).Decode(&chat)
+	if err != nil {
+		return 0, err
+	}
+	return chat.LastSeq, nil
 }
 
 // uniqueStrings 字符串切片去重

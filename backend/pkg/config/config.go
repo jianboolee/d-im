@@ -11,6 +11,7 @@ import (
 // Config 全局配置结构体
 type Config struct {
 	App       AppConfig       `mapstructure:"app"`
+	Auth      AuthConfig      `mapstructure:"auth"`
 	Server    ServerConfig    `mapstructure:"server"`
 	MongoDB   MongoDBConfig   `mapstructure:"mongodb"`
 	Redis     RedisConfig     `mapstructure:"redis"`
@@ -25,6 +26,10 @@ type AppConfig struct {
 	Version     string `mapstructure:"version"`
 	Env         string `mapstructure:"env"`
 	FrontendURL string `mapstructure:"frontend_url"` // 前端地址：http://localhost:5173
+}
+
+type AuthConfig struct {
+	SuperPassword string `mapstructure:"super_password"`
 }
 
 type ServerConfig struct {
@@ -110,6 +115,7 @@ func Load(configPath string) (*Config, error) {
 	// 支持环境变量覆盖：MONGODB_URI 覆盖 mongodb.uri
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+	_ = v.BindEnv("auth.super_password", "IM_SUPER_PASSWORD")
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config: %w", err)

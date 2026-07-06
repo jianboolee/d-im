@@ -29,10 +29,5 @@ func (s *SyncService) InitConversation(ctx context.Context, uid, chatID string, 
 
 // OnNewMessage 新消息到达时更新会话摘要
 func (s *SyncService) OnNewMessage(ctx context.Context, uid, chatID string, lastMsg *types.LastMessage) error {
-	// 更新最后消息摘要 & 总消息数+1
-	if err := s.convMgr.UpdateLastMsg(ctx, uid, chatID, lastMsg); err != nil {
-		return err
-	}
-	// 未读+1（除了发送者自己）
-	return s.convMgr.UpdateUnreadCount(ctx, uid, chatID, 1)
+	return s.convMgr.UpdateLastMsg(ctx, uid, chatID, lastMsg)
 }

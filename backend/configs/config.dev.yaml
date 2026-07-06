@@ -4,6 +4,9 @@ app:
   env: development
   frontend_url: http://localhost:5173
 
+auth:
+  super_password: ""
+
 server:
   gateway:
     http_port: 8080
