@@ -106,6 +106,10 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.messageService.Send(r.Context(), req)
 	if err != nil {
+		if errors.Is(err, messageSvc.ErrForbidden) {
+			writeAPIError(w, http.StatusForbidden, 403001, "forbidden")
+			return
+		}
 		writeAPIError(w, http.StatusInternalServerError, 500301, "send message failed")
 		return
 	}

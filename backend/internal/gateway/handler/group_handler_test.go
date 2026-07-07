@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"d-im/internal/gateway/handler/middleware"
+	groupSvc "d-im/internal/group/service"
 	messageSvc "d-im/internal/message/service"
 	"d-im/pkg/model"
 	"d-im/pkg/types"
@@ -34,7 +35,18 @@ func (f *fakeGroupOperator) GetGroupForMember(_ context.Context, _ string, _ str
 	return f.chat, nil
 }
 
-func (f *fakeGroupOperator) AddMembers(_ context.Context, _ string, uidList []string) (*model.Chat, error) {
+func (f *fakeGroupOperator) ListGroupsForMember(_ context.Context, _ string, _ int64, _ int64) ([]*model.Chat, error) {
+	return []*model.Chat{f.chat}, nil
+}
+
+func (f *fakeGroupOperator) JoinGroup(_ context.Context, _ string, uid string) (*model.Chat, error) {
+	updated := *f.chat
+	updated.Members = append(append([]string{}, f.chat.Members...), uid)
+	updated.MemberCount = len(updated.Members)
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) AddMembers(_ context.Context, _ string, _ string, uidList []string) (*model.Chat, error) {
 	f.addedUsers = append([]string{}, uidList...)
 	updated := *f.chat
 	updated.Members = append(append([]string{}, f.chat.Members...), uidList...)
@@ -46,9 +58,63 @@ func (f *fakeGroupOperator) RemoveMember(_ context.Context, _ string, _ string) 
 	return nil
 }
 
-func (f *fakeGroupOperator) UpdateName(_ context.Context, _ string, name string) (*model.Chat, error) {
+func (f *fakeGroupOperator) LeaveGroup(_ context.Context, _ string, _ string) (*model.Chat, error) {
+	return f.chat, nil
+}
+
+func (f *fakeGroupOperator) KickMember(_ context.Context, _ string, _ string, _ string) (*model.Chat, error) {
+	return f.chat, nil
+}
+
+func (f *fakeGroupOperator) UpdateInfo(_ context.Context, _ string, _ string, info groupSvc.UpdateGroupInfo) (*model.Chat, error) {
+	updated := *f.chat
+	if info.Name != nil {
+		updated.Name = *info.Name
+	}
+	if info.Avatar != nil {
+		updated.Avatar = *info.Avatar
+	}
+	if info.Description != nil {
+		updated.Description = *info.Description
+	}
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) UpdateName(_ context.Context, _ string, _ string, name string) (*model.Chat, error) {
 	updated := *f.chat
 	updated.Name = name
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) UpdateSettings(_ context.Context, _ string, _ string, settings model.GroupSettings) (*model.Chat, error) {
+	updated := *f.chat
+	updated.Settings = settings
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) SetAnnouncement(_ context.Context, _ string, _ string, announcement string) (*model.Chat, error) {
+	updated := *f.chat
+	updated.Announcement = announcement
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) SetMemberRole(_ context.Context, _ string, _ string, targetUID string, role model.MemberRole) (*model.Chat, error) {
+	updated := *f.chat
+	if role == model.MemberRoleAdmin {
+		updated.Admins = append(updated.Admins, targetUID)
+	}
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) TransferOwner(_ context.Context, _ string, _ string, targetUID string) (*model.Chat, error) {
+	updated := *f.chat
+	updated.OwnerUID = targetUID
+	return &updated, nil
+}
+
+func (f *fakeGroupOperator) DismissGroup(_ context.Context, _ string, _ string) (*model.Chat, error) {
+	updated := *f.chat
+	updated.Status = model.GroupStatusDismissed
 	return &updated, nil
 }
 

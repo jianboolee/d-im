@@ -101,6 +101,9 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	if s.chatColl == nil {
 		return nil, fmt.Errorf("chat collection is required")
 	}
+	if err := s.checkSendPermission(ctx, req); err != nil {
+		return nil, err
+	}
 
 	msgID := s.GenerateMsgID()
 	msgSeq, err := model.NextChatMessageSeq(ctx, s.chatColl, req.ChatID)
@@ -193,6 +196,53 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		Message:       msg,
 		SenderMailbox: senderMailbox,
 	}, nil
+}
+
+func (s *MessageService) checkSendPermission(ctx context.Context, req *SendMessageReq) error {
+	if req == nil || req.ChatID == "" {
+		return nil
+	}
+	chat, err := model.FindChatByID(ctx, s.chatColl, req.ChatID)
+	if err != nil {
+		return err
+	}
+	if chat.Status == model.GroupStatusDismissed {
+		return fmt.Errorf("%w: chat dismissed", ErrForbidden)
+	}
+	if req.ChatType == types.ChatTypeGroup || chat.ChatType == types.ChatTypeGroup {
+		if !containsUID(chat.Members, req.SenderID) {
+			return fmt.Errorf("%w: sender is not group member", ErrForbidden)
+		}
+		if isPrivilegedGroupMember(chat, req.SenderID) {
+			return nil
+		}
+		if chat.Settings.IsMutedAll {
+			return fmt.Errorf("%w: group muted all", ErrForbidden)
+		}
+		if containsUID(chat.Settings.MutedMembers, req.SenderID) {
+			return fmt.Errorf("%w: sender muted", ErrForbidden)
+		}
+	}
+	return nil
+}
+
+func isPrivilegedGroupMember(chat *model.Chat, uid string) bool {
+	if chat == nil || uid == "" {
+		return false
+	}
+	if chat.OwnerUID == uid {
+		return true
+	}
+	return containsUID(chat.Admins, uid)
+}
+
+func containsUID(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMessageReq) (*SendMessageResp, error) {

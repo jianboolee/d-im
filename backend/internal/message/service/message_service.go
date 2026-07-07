@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
@@ -10,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+var ErrForbidden = errors.New("forbidden")
 
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
