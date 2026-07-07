@@ -19,6 +19,7 @@ type Config struct {
 	Snowflake SnowflakeConfig `mapstructure:"snowflake"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	Log       LogConfig       `mapstructure:"log"`
+	Storage   StorageConfig   `mapstructure:"storage"`
 }
 
 type AppConfig struct {
@@ -98,6 +99,37 @@ type LogConfig struct {
 	Output string `mapstructure:"output"`
 }
 
+type StorageConfig struct {
+	Provider      string             `mapstructure:"provider"`
+	PublicBaseURL string             `mapstructure:"public_base_url"`
+	MaxImageSize  int64              `mapstructure:"max_image_size"`
+	Local         LocalStorageConfig `mapstructure:"local"`
+	AliyunOSS     AliyunOSSConfig    `mapstructure:"aliyun_oss"`
+	Qiniu         QiniuStorageConfig `mapstructure:"qiniu"`
+}
+
+type LocalStorageConfig struct {
+	RootDir   string `mapstructure:"root_dir"`
+	URLPrefix string `mapstructure:"url_prefix"`
+}
+
+type AliyunOSSConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	AccessKeySecret string `mapstructure:"access_key_secret"`
+	Bucket          string `mapstructure:"bucket"`
+	Directory       string `mapstructure:"directory"`
+	PublicBaseURL   string `mapstructure:"public_base_url"`
+}
+
+type QiniuStorageConfig struct {
+	AccessKey     string `mapstructure:"access_key"`
+	SecretKey     string `mapstructure:"secret_key"`
+	Bucket        string `mapstructure:"bucket"`
+	Region        string `mapstructure:"region"`
+	PublicBaseURL string `mapstructure:"public_base_url"`
+}
+
 // Load 加载配置文件
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
@@ -116,6 +148,22 @@ func Load(configPath string) (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	_ = v.BindEnv("auth.super_password", "IM_SUPER_PASSWORD")
+	_ = v.BindEnv("storage.provider", "STORAGE_PROVIDER")
+	_ = v.BindEnv("storage.public_base_url", "STORAGE_PUBLIC_BASE_URL")
+	_ = v.BindEnv("storage.max_image_size", "STORAGE_MAX_IMAGE_SIZE")
+	_ = v.BindEnv("storage.local.root_dir", "STORAGE_LOCAL_ROOT_DIR")
+	_ = v.BindEnv("storage.local.url_prefix", "STORAGE_LOCAL_URL_PREFIX")
+	_ = v.BindEnv("storage.aliyun_oss.endpoint", "STORAGE_ALIYUN_OSS_ENDPOINT")
+	_ = v.BindEnv("storage.aliyun_oss.access_key_id", "STORAGE_ALIYUN_OSS_ACCESS_KEY_ID")
+	_ = v.BindEnv("storage.aliyun_oss.access_key_secret", "STORAGE_ALIYUN_OSS_ACCESS_KEY_SECRET")
+	_ = v.BindEnv("storage.aliyun_oss.bucket", "STORAGE_ALIYUN_OSS_BUCKET")
+	_ = v.BindEnv("storage.aliyun_oss.directory", "STORAGE_ALIYUN_OSS_DIRECTORY")
+	_ = v.BindEnv("storage.aliyun_oss.public_base_url", "STORAGE_ALIYUN_OSS_PUBLIC_BASE_URL")
+	_ = v.BindEnv("storage.qiniu.access_key", "STORAGE_QINIU_ACCESS_KEY")
+	_ = v.BindEnv("storage.qiniu.secret_key", "STORAGE_QINIU_SECRET_KEY")
+	_ = v.BindEnv("storage.qiniu.bucket", "STORAGE_QINIU_BUCKET")
+	_ = v.BindEnv("storage.qiniu.region", "STORAGE_QINIU_REGION")
+	_ = v.BindEnv("storage.qiniu.public_base_url", "STORAGE_QINIU_PUBLIC_BASE_URL")
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config: %w", err)

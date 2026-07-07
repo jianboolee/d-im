@@ -56,3 +56,24 @@ log:
   level: debug
   format: console
   output: stdout
+
+storage:
+  provider: local
+  public_base_url: http://localhost:8080
+  max_image_size: 20971520
+  local:
+    root_dir: ./data/media
+    url_prefix: /media
+  aliyun_oss:
+    endpoint: ""
+    access_key_id: ""
+    access_key_secret: ""
+    bucket: ""
+    directory: /media
+    public_base_url: ""
+  qiniu:
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    public_base_url: ""

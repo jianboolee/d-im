@@ -25,17 +25,21 @@ import { MessageType } from '@/sdk/im'
 import { readImageDimensions, getFileFormat } from '@/utils/file'
 import { uploadIMFile } from '@/utils/upload'
 
-const IMAGE_MAX_SIZE = 10 * 1024 * 1024
+const IMAGE_MAX_SIZE = 20 * 1024 * 1024
 const IMAGE_MAX_COUNT = 9
 const IMAGE_ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp'])
 
 /** 文件上传结果 */
 interface UploadResult {
   url: string
+  filename?: string
   size: number
-  width?: number
-  height?: number
+  width: number
+  height: number
   format?: string
+  media_id?: string
+  key?: string
+  provider?: string
 }
 
 type PendingUploadInfo = UploadResult & { uploading?: boolean }
@@ -83,34 +87,43 @@ function assertImageExtension(file: File): boolean {
 }
 
 async function uploadImage(file: File) {
-  const localUrl = URL.createObjectURL(file)
-  const format = getFileFormat(file)
-
-  emit('select-file', file, MessageType.Image, {
-    url: localUrl,
-    size: file.size,
-    format,
-    width: 0,
-    height: 0,
-    uploading: true,
-  })
-
+  let localUrl = ''
+  let emittedPreview = false
   try {
-    const uploaded = await uploadIMFile(file)
+    localUrl = URL.createObjectURL(file)
+    const format = getFileFormat(file)
     const dimensions = await readImageDimensions(file)
 
+    emit('select-file', file, MessageType.Image, {
+      url: localUrl,
+      size: file.size,
+      format,
+      width: dimensions.width,
+      height: dimensions.height,
+      uploading: true,
+    })
+    emittedPreview = true
+
+    const uploaded = await uploadIMFile(file)
     const result: UploadResult = {
       url: uploaded.url,
+      filename: uploaded.filename,
       size: uploaded.size,
-      width: uploaded.width ?? dimensions.width,
-      height: uploaded.height ?? dimensions.height,
+      width: uploaded.width,
+      height: uploaded.height,
       format: uploaded.format ?? format,
+      media_id: uploaded.media_id,
+      key: uploaded.key,
+      provider: uploaded.provider,
     }
 
     emit('upload-success', file, MessageType.Image, result)
   } catch (error) {
     console.error('图片上传失败:', error)
     showToast('上传失败')
+    if (localUrl && !emittedPreview) {
+      URL.revokeObjectURL(localUrl)
+    }
     emit('upload-error', file, MessageType.Image)
   }
 }
@@ -123,7 +136,7 @@ async function handleImageChange(event: Event) {
   if (files.length === 0) return
   if (!assertImageCount(files)) return
   if (!files.every(assertImageExtension)) return
-  if (!files.every((file) => assertFileSize(file, IMAGE_MAX_SIZE, '图片大小不能超过10MB'))) {
+  if (!files.every((file) => assertFileSize(file, IMAGE_MAX_SIZE, '图片大小不能超过20MB'))) {
     return
   }
 

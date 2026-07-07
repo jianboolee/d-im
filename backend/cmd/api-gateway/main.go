@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +16,8 @@ import (
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
 	groupSvc "d-im/internal/group/service"
+	mediaSvc "d-im/internal/media/service"
+	mediaStorage "d-im/internal/media/storage"
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
 	userRepo "d-im/internal/user/repository"
@@ -81,6 +84,11 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db, idGen)
 	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, convMgr, natsPub)
+	store, mediaStaticHandler, err := newMediaStorage(cfg)
+	if err != nil {
+		log.Fatalf("media storage: %v", err)
+	}
+	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
 	conversationSvc := convSvc.NewConversationService(convMgr, chatMgr)
 	uRepo := userRepo.NewUserRepo(db)
@@ -89,9 +97,10 @@ func main() {
 	convHandler := handler.NewConversationHandler(conversationSvc, chatMgr, uRepo)
 	groupService := groupSvc.NewGroupService(chatMgr, convMgr)
 	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
+	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)
 	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, userHandler, sdkHandler)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, uploadHandler, mediaStaticHandler, userHandler, sdkHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),
@@ -119,4 +128,58 @@ func main() {
 
 func itoa(n int) string {
 	return fmt.Sprintf("%d", n)
+}
+
+func newMediaStorage(cfg *config.Config) (mediaStorage.Storage, http.Handler, error) {
+	localStaticHandler, err := newLocalMediaStaticHandler(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	provider := cfg.Storage.Provider
+	if provider == "" {
+		provider = mediaStorage.ProviderLocal
+	}
+
+	switch provider {
+	case mediaStorage.ProviderLocal:
+		local, err := mediaStorage.NewLocalStorage(mediaStorage.LocalConfig{
+			RootDir:       cfg.Storage.Local.RootDir,
+			URLPrefix:     cfg.Storage.Local.URLPrefix,
+			PublicBaseURL: cfg.Storage.PublicBaseURL,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return local, localStaticHandler, nil
+	case mediaStorage.ProviderAliyunOSS:
+		oss, err := mediaStorage.NewAliyunOSSStorage(mediaStorage.AliyunOSSConfig{
+			Endpoint:        cfg.Storage.AliyunOSS.Endpoint,
+			AccessKeyID:     cfg.Storage.AliyunOSS.AccessKeyID,
+			AccessKeySecret: cfg.Storage.AliyunOSS.AccessKeySecret,
+			Bucket:          cfg.Storage.AliyunOSS.Bucket,
+			Directory:       cfg.Storage.AliyunOSS.Directory,
+			PublicBaseURL:   cfg.Storage.AliyunOSS.PublicBaseURL,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return oss, localStaticHandler, nil
+	case "qiniu":
+		return nil, nil, fmt.Errorf("qiniu storage is not implemented yet")
+	default:
+		return nil, nil, fmt.Errorf("unsupported storage provider %q", provider)
+	}
+}
+
+func newLocalMediaStaticHandler(cfg *config.Config) (http.Handler, error) {
+	local, err := mediaStorage.NewLocalStorage(mediaStorage.LocalConfig{
+		RootDir:       cfg.Storage.Local.RootDir,
+		URLPrefix:     cfg.Storage.Local.URLPrefix,
+		PublicBaseURL: cfg.Storage.PublicBaseURL,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return http.StripPrefix(local.URLPrefix()+"/", http.FileServer(http.Dir(local.RootDir()))), nil
 }

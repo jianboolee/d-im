@@ -6,9 +6,12 @@ export interface UploadedFile {
   url: string
   filename: string
   size: number
-  width?: number
-  height?: number
+  width: number
+  height: number
   format?: string
+  media_id?: string
+  key?: string
+  provider?: string
 }
 
 export const UPLOAD_TIMEOUT_MS = 60000
@@ -31,7 +34,7 @@ export async function uploadIMFile(file: File): Promise<UploadedFile> {
       : response
   ) as UploadedFile
 
-  if (!data?.url) {
+  if (!data?.url || !data.width || !data.height) {
     throw new Error('上传失败')
   }
 

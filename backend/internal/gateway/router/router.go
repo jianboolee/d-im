@@ -15,6 +15,8 @@ func NewRouter(
 	messageHandler *handler.MessageHandler,
 	convHandler *handler.ConversationHandler,
 	groupHandler *handler.GroupHandler,
+	uploadHandler *handler.UploadHandler,
+	mediaStaticHandler http.Handler,
 	userHandler *handler.UserHandler,
 	sdkHandler *handler.SDKHandler,
 ) http.Handler {
@@ -31,6 +33,9 @@ func NewRouter(
 	mux.HandleFunc("POST /api/v1/auth/refresh", authHandler.RefreshToken)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
 	mux.HandleFunc("POST /api/v1/auth/session", authHandler.CreateSession)
+	if mediaStaticHandler != nil {
+		mux.Handle("/media/", mediaStaticHandler)
+	}
 
 	// 业务 SDK 路由（API Key 鉴权，在 handler 内完成）
 	mux.HandleFunc("POST /api/v1/sdk/user/sync", sdkHandler.SyncUser)
@@ -55,6 +60,7 @@ func NewRouter(
 	protected.HandleFunc("GET /api/v1/groups/{id}/members", groupHandler.ListMembers)
 	protected.HandleFunc("POST /api/v1/groups/{id}/members", groupHandler.InviteMembers)
 	protected.HandleFunc("POST /api/v1/groups/{id}/leave", groupHandler.LeaveGroup)
+	protected.HandleFunc("POST /api/v1/uploads/image", uploadHandler.UploadImage)
 	protected.HandleFunc("GET /api/v1/users/me", userHandler.GetMe)
 	protected.HandleFunc("GET /api/v1/users/{id}", userHandler.GetUser)
 
@@ -70,6 +76,7 @@ func NewRouter(
 	mux.Handle("/api/v1/conversations/", protectedHandler)
 	mux.Handle("/api/v1/groups", protectedHandler)
 	mux.Handle("/api/v1/groups/", protectedHandler)
+	mux.Handle("/api/v1/uploads/", protectedHandler)
 	mux.Handle("/api/v1/users/", protectedHandler)
 
 	return mux

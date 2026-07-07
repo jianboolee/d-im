@@ -1175,6 +1175,7 @@ const retryUploadImageMessage = async (message: ChatMessage, messageIndex: numbe
         height: h,
         size: uploaded.size,
         format,
+        file_name: uploaded.filename || file.name,
       },
       clientMessageId,
     )
@@ -1201,6 +1202,7 @@ const retryUploadImageMessage = async (message: ChatMessage, messageIndex: numbe
 // 文件上传预览信息（纯前端本地结构）
 interface FilePreview {
   url: string        // 预览 blob URL
+  filename?: string
   size: number
   width?: number
   height?: number
@@ -1224,7 +1226,14 @@ const handleSelectFile = (file: File, type: string, preview: FilePreview) => {
     status: 'sending',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    content: { url: preview.url },
+    content: {
+      url: preview.url,
+      width: preview.width,
+      height: preview.height,
+      size: preview.size,
+      format: preview.format,
+      file_name: preview.filename || file.name,
+    },
     uploadState: { uploading: true, localFile: file },
   }
 
@@ -1233,7 +1242,7 @@ const handleSelectFile = (file: File, type: string, preview: FilePreview) => {
   scrollToBottom(true, true)
 }
 
-const handleUploadSuccess = async (file: File, type: string, uploaded: { url: string; size: number; width?: number; height?: number; format?: string }) => {
+const handleUploadSuccess = async (file: File, type: string, uploaded: { url: string; filename?: string; size: number; width: number; height: number; format?: string }) => {
   const messageType = type as MessageType
   const pendingMessageId = pendingUploadMessageIds.get(file)
   const messageIndex = messages.value.findIndex(
@@ -1260,6 +1269,7 @@ const handleUploadSuccess = async (file: File, type: string, uploaded: { url: st
         height: uploaded.height,
         size: uploaded.size,
         format: uploaded.format,
+        file_name: uploaded.filename || file.name,
       } as MessageContent,
       current.client_message_id,
     )

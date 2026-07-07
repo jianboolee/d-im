@@ -1123,6 +1123,77 @@ Authorization: Bearer <access_token>
 - cursor 仍基于 `messages.seq`，用于继续向更早搜索结果翻页。
 - `items` 内部按时间正序排列，旧消息在前，新消息在后。
 
+## 媒体上传接口
+
+媒体存储默认使用本地存储，可通过 `storage.provider` 平滑切换到阿里云 OSS、七牛云等 provider。媒体对象 ID 独立生成，使用 UUID v7，不复用 snowflake。
+
+### 上传图片
+
+```http
+POST /api/v1/uploads/image
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+```
+
+请求：
+
+- `file`：图片文件，当前支持后端可识别宽高的图片格式。
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "url": "http://localhost:8080/media/im/images/2026/07/07/0197....png",
+    "filename": "avatar.png",
+    "size": 1234,
+    "width": 320,
+    "height": 180,
+    "format": "png",
+    "media_id": "0197....",
+    "key": "im/images/2026/07/07/0197....png",
+    "provider": "local"
+  },
+  "error": ""
+}
+```
+
+规则：
+
+- 返回结构固定携带 `width`、`height`，方便 web 直接构造图片消息 content。
+- 本地存储默认写入 `./data/media`，通过 `/media/` 访问。
+- 切换云存储后，上传接口和前端调用不变，响应仍保持同一结构。
+
+### 存储 provider
+
+默认本地：
+
+```yaml
+storage:
+  provider: local
+  public_base_url: http://localhost:8080
+  local:
+    root_dir: ./data/media
+    url_prefix: /media
+```
+
+切换阿里云 OSS：
+
+```yaml
+storage:
+  provider: aliyun_oss
+  aliyun_oss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    access_key_id: ${ACCESS_KEY_ID}
+    access_key_secret: ${ACCESS_KEY_SECRET}
+    bucket: im-media
+    directory: /media
+    public_base_url: https://cdn.example.com
+```
+
+阿里云 OSS 使用同一套 `Storage` 接口；新文件写入 OSS，响应 `provider` 为 `aliyun_oss`。`directory` 默认 `/media`，用于给 OSS object key 增加统一前缀。`public_base_url` 建议配置为 CDN 或 bucket 公网访问域名。
+
 ## WebSocket
 
 ### 连接
