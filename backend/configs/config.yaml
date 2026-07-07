@@ -36,10 +36,10 @@ nats:
     message_send: im.message.send
     message_push: im.message.push
     message_event: im.message.event
-    user_created: dsaas.user.created
-    user_updated: dsaas.user.profile_updated
-    user_status: dsaas.user.status_changed
-    user_deleted: dsaas.user.deleted
+    user_created: dimuser.created
+    user_updated: dimuser.profile_updated
+    user_status: dimuser.status_changed
+    user_deleted: dimuser.deleted
 
 snowflake:
   worker_id: 1

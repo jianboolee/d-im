@@ -16,6 +16,7 @@ import (
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
+	groupAdapter "d-im/internal/group/adapter"
 	groupAvatar "d-im/internal/group/avatar"
 	groupRepo "d-im/internal/group/repository"
 	groupSvc "d-im/internal/group/service"
@@ -80,7 +81,7 @@ func main() {
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	groupService := groupSvc.NewGroupService(db, chatR, gRepo, mRepo, convMgr)
-	memberService := groupSvc.NewMemberService(chatR, gRepo, mRepo, convMgr)
+	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convMgr)
 	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convMgr, natsPub)
 	msgSvc.SetGroupReader(groupService)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
@@ -94,8 +95,11 @@ func main() {
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatR, groupService, uRepo)
+	eventPub := groupSvc.NewEventPublisher(groupAdapter.NewNATSEventAdapter(natsPub))
 	groupService.SetAvatarGenerator(groupAvatar.NewGenerator(store, uRepo))
-	groupHandler := handler.NewGroupHandler(groupService, memberService, conversationSvc, msgSvc, uRepo)
+	groupService.SetEventPublisher(eventPub)
+	memberService.SetEventPublisher(eventPub)
+	groupHandler := handler.NewGroupHandler(groupService, memberService, conversationSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)
 	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)

@@ -19,19 +19,19 @@ This mode provides retry and visibility for events that were recorded. It does n
 Subjects use:
 
 ```text
-dsaas.{domain}.{event}
+dim{domain}.{event}
 ```
 
 Examples:
 
 ```text
-dsaas.user.created
-dsaas.user.profile_updated
-dsaas.user.status_changed
-dsaas.user.deleted
+dimuser.created
+dimuser.profile_updated
+dimuser.status_changed
+dimuser.deleted
 ```
 
-Subjects describe domain facts, not consumers. Avoid names such as `dsaas.im.user.created`.
+Subjects describe domain facts, not consumers. Avoid names such as `dimim.user.created`.
 
 ## Event Envelope
 
@@ -39,7 +39,7 @@ Subjects describe domain facts, not consumers. Avoid names such as `dsaas.im.use
 {
   "id": "event_id",
   "type": "user.created",
-  "subject": "dsaas.user.created",
+  "subject": "dimuser.created",
   "aggregate_type": "user",
   "aggregate_id": "user_id",
   "occurred_at": "2026-07-03T12:00:00+08:00",
@@ -100,13 +100,13 @@ verification materials
 Initial expected consumers:
 
 ```text
-dsaas.user.created
+dimuser.created
 Consumers: im-service, recommendation-service
 
-dsaas.user.profile_updated
+dimuser.profile_updated
 Consumers: im-service, recommendation-service
 
-dsaas.user.status_changed
+dimuser.status_changed
 Consumers: im-service, recommendation-service
 ```
 

@@ -7,10 +7,10 @@ The user module publishes domain facts. Consumers such as IM, search, recommenda
 ## Subjects
 
 ```text
-dsaas.user.created
-dsaas.user.profile_updated
-dsaas.user.status_changed
-dsaas.user.deleted
+dimuser.created
+dimuser.profile_updated
+dimuser.status_changed
+dimuser.deleted
 ```
 
 Subjects describe what happened in the business domain, not who should consume the event.
@@ -18,8 +18,8 @@ Subjects describe what happened in the business domain, not who should consume t
 Do not create consumer-specific subjects such as:
 
 ```text
-dsaas.im.user.created
-dsaas.recommendation.user.updated
+dimim.user.created
+dimrecommendation.user.updated
 ```
 
 ## Event Envelope
@@ -30,7 +30,7 @@ NATS messages contain the full event envelope:
 {
   "id": "event_id",
   "type": "user.created",
-  "subject": "dsaas.user.created",
+  "subject": "dimuser.created",
   "aggregate_type": "user",
   "aggregate_id": "user_id",
   "occurred_at": "2026-07-04T10:00:00+08:00",
@@ -74,7 +74,7 @@ Example:
 {
   "id": "01JZ7Y4X0P6KQK8TE6AK8ABCD1",
   "type": "user.created",
-  "subject": "dsaas.user.created",
+  "subject": "dimuser.created",
   "aggregate_type": "user",
   "aggregate_id": "usr_123",
   "occurred_at": "2026-07-04T10:00:00+08:00",
@@ -128,7 +128,7 @@ Example:
 {
   "id": "01JZ7Y5BCJ4GYJ22N3S2WXYZ02",
   "type": "user.profile_updated",
-  "subject": "dsaas.user.profile_updated",
+  "subject": "dimuser.profile_updated",
   "aggregate_type": "user",
   "aggregate_id": "usr_123",
   "occurred_at": "2026-07-04T10:03:00+08:00",
@@ -169,7 +169,7 @@ Example:
 {
   "id": "01JZ7Y5T7CND9M9MS0YF8WXYZ3",
   "type": "user.status_changed",
-  "subject": "dsaas.user.status_changed",
+  "subject": "dimuser.status_changed",
   "aggregate_type": "user",
   "aggregate_id": "usr_123",
   "occurred_at": "2026-07-04T10:05:00+08:00",
@@ -214,7 +214,7 @@ Example:
 {
   "id": "01JZ7Y69WXW9TJCGQ5WV8WXYZ4",
   "type": "user.deleted",
-  "subject": "dsaas.user.deleted",
+  "subject": "dimuser.deleted",
   "aggregate_type": "user",
   "aggregate_id": "usr_123",
   "occurred_at": "2026-07-04T10:08:00+08:00",
@@ -317,10 +317,10 @@ Use is_protected only as identity metadata unless the consumer has its own rule.
 IM may subscribe to:
 
 ```text
-dsaas.user.created
-dsaas.user.profile_updated
-dsaas.user.status_changed
-dsaas.user.deleted
+dimuser.created
+dimuser.profile_updated
+dimuser.status_changed
+dimuser.deleted
 ```
 
 Suggested behavior:

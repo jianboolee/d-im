@@ -10,33 +10,26 @@ import (
 
 	"d-im/internal/gateway/handler/middleware"
 	groupSvc "d-im/internal/group/service"
-	messageSvc "d-im/internal/message/service"
 	"d-im/pkg/model"
-	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+type conversationByChatReader interface {
+	GetConversationByChatID(ctx context.Context, uid, chatID string) (*model.Conversation, error)
+}
 
 // GroupHandler 群聊 HTTP 处理器。
 type GroupHandler struct {
 	groups  *groupSvc.GroupService
 	members *groupSvc.MemberService
 	convSvc conversationByChatReader
-	msgSvc  groupMessageSender
 	users   userReader
 }
 
-type conversationByChatReader interface {
-	GetConversationByChatID(ctx context.Context, uid, chatID string) (*model.Conversation, error)
-}
-
-type groupMessageSender interface {
-	Send(ctx context.Context, req *messageSvc.SendMessageReq) (*messageSvc.SendMessageResp, error)
-}
-
 // NewGroupHandler 创建群聊处理器。
-func NewGroupHandler(groups *groupSvc.GroupService, members *groupSvc.MemberService, convSvc conversationByChatReader, msgSvc groupMessageSender, users userReader) *GroupHandler {
-	return &GroupHandler{groups: groups, members: members, convSvc: convSvc, msgSvc: msgSvc, users: users}
+func NewGroupHandler(groups *groupSvc.GroupService, members *groupSvc.MemberService, convSvc conversationByChatReader, users userReader) *GroupHandler {
+	return &GroupHandler{groups: groups, members: members, convSvc: convSvc, users: users}
 }
 
 // ListGroups 获取当前用户加入的群列表。
@@ -74,10 +67,7 @@ func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Name          string   `json:"name"`
-		MemberUserIDs []string `json:"member_user_ids"`
-	}
+	var req createGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
@@ -92,12 +82,6 @@ func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, 500401, "create group failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, group, groupSystemEvent{
-		EventType:     "group_created",
-		OperatorID:    uid,
-		TargetUserIDs: withoutUID(uniqueNonEmpty(append([]string{uid}, req.MemberUserIDs...)), uid),
-		Text:          h.operatorName(r, uid) + "创建了群聊",
-	})
 
 	conversationID := ""
 	resp := map[string]interface{}{}
@@ -123,7 +107,7 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	if group == nil {
 		return
 	}
-	members, err := h.groups.ListMembers(r.Context(), group.ChatID, 20, 0)
+	members, err := h.members.ListMembers(r.Context(), group.ChatID, 20, 0)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, 500405, "get group members failed")
 		return
@@ -142,12 +126,7 @@ func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Name        *string `json:"name"`
-		AvatarURL   *string `json:"avatar_url"`
-		Avatar      *string `json:"avatar"`
-		Description *string `json:"description"`
-	}
+	var req updateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
@@ -161,7 +140,6 @@ func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		avatar = req.AvatarURL
 	}
 
-	beforeName := group.Name
 	updated, err := h.groups.UpdateInfo(r.Context(), group.ChatID, middleware.GetUserID(r.Context()), groupSvc.UpdateGroupInfo{
 		Name:        req.Name,
 		Avatar:      avatar,
@@ -170,15 +148,6 @@ func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500402, "update group failed")
 		return
-	}
-	if req.Name != nil && beforeName != updated.Name {
-		h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-			EventType:   "group_name_updated",
-			OperatorID:  middleware.GetUserID(r.Context()),
-			Text:        h.operatorName(r, middleware.GetUserID(r.Context())) + "修改群名为“" + updated.Name + "”",
-			BeforeValue: beforeName,
-			AfterValue:  updated.Name,
-		})
 	}
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
@@ -213,7 +182,7 @@ func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 		start = parsed
 	}
 
-	members, err := h.groups.ListMembers(r.Context(), group.ChatID, int64(limit), int64(start))
+	members, err := h.members.ListMembers(r.Context(), group.ChatID, int64(limit), int64(start))
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, 500405, "get group members failed")
 		return
@@ -238,9 +207,7 @@ func (h *GroupHandler) InviteMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		MemberUserIDs []string `json:"member_user_ids"`
-	}
+	var req inviteMembersRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
@@ -250,18 +217,10 @@ func (h *GroupHandler) InviteMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, addedUserIDs, err := h.groups.AddMembers(r.Context(), group.ChatID, middleware.GetUserID(r.Context()), req.MemberUserIDs)
+	updated, _, err := h.members.AddMembers(r.Context(), group.ChatID, middleware.GetUserID(r.Context()), req.MemberUserIDs)
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500403, "invite members failed")
 		return
-	}
-	if len(addedUserIDs) > 0 {
-		h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-			EventType:     "members_invited",
-			OperatorID:    middleware.GetUserID(r.Context()),
-			TargetUserIDs: addedUserIDs,
-			Text:          h.operatorName(r, middleware.GetUserID(r.Context())) + "邀请" + h.userListText(r, addedUserIDs) + "加入群聊",
-		})
 	}
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
@@ -276,16 +235,10 @@ func (h *GroupHandler) LeaveGroup(w http.ResponseWriter, r *http.Request) {
 	if group == nil {
 		return
 	}
-	if _, err := h.groups.LeaveGroup(r.Context(), group.ChatID, uid); err != nil {
+	if _, err := h.members.LeaveGroup(r.Context(), group.ChatID, uid); err != nil {
 		h.writeGroupServiceError(w, err, 500404, "leave group failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, group, groupSystemEvent{
-		EventType:     "member_left",
-		OperatorID:    uid,
-		TargetUserIDs: []string{uid},
-		Text:          h.operatorName(r, uid) + "退出了群聊",
-	})
 	writeAPISuccess(w, map[string]interface{}{})
 }
 
@@ -302,17 +255,11 @@ func (h *GroupHandler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, 400022, "group_id is required")
 		return
 	}
-	updated, err := h.groups.JoinGroup(r.Context(), groupID, uid)
+	updated, err := h.members.JoinGroup(r.Context(), groupID, uid)
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500407, "join group failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-		EventType:     "member_joined",
-		OperatorID:    uid,
-		TargetUserIDs: []string{uid},
-		Text:          h.operatorName(r, uid) + "加入了群聊",
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
@@ -331,17 +278,11 @@ func (h *GroupHandler) KickMember(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, 400024, "member uid is required")
 		return
 	}
-	updated, err := h.groups.KickMember(r.Context(), group.ChatID, operatorUID, targetUID)
+	updated, err := h.members.KickMember(r.Context(), group.ChatID, operatorUID, targetUID)
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500408, "kick member failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-		EventType:     "member_kicked",
-		OperatorID:    operatorUID,
-		TargetUserIDs: []string{targetUID},
-		Text:          h.operatorName(r, operatorUID) + "将" + h.operatorName(r, targetUID) + "移出了群聊",
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
@@ -355,16 +296,11 @@ func (h *GroupHandler) DismissGroup(w http.ResponseWriter, r *http.Request) {
 	if group == nil {
 		return
 	}
-	updated, err := h.groups.DismissGroup(r.Context(), group.ChatID, operatorUID)
+	updated, err := h.members.DismissGroup(r.Context(), group.ChatID, operatorUID)
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500409, "dismiss group failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, group, groupSystemEvent{
-		EventType:  "group_dismissed",
-		OperatorID: operatorUID,
-		Text:       h.operatorName(r, operatorUID) + "解散了群聊",
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, ""),
 	})
@@ -379,18 +315,13 @@ func (h *GroupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings := group.Settings
-	var req struct {
-		JoinMethod   *model.JoinMethod `json:"join_method"`
-		IsMutedAll   *bool             `json:"is_muted_all"`
-		IsPublic     *bool             `json:"is_public"`
-		MutedMembers []string          `json:"muted_members"`
-	}
+	var req updateSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if req.JoinMethod != nil {
-		settings.JoinMethod = *req.JoinMethod
+		settings.JoinMethod = model.JoinMethod(*req.JoinMethod)
 	}
 	if req.IsMutedAll != nil {
 		settings.IsMutedAll = *req.IsMutedAll
@@ -423,9 +354,7 @@ func (h *GroupHandler) SetAnnouncement(w http.ResponseWriter, r *http.Request) {
 	if group == nil {
 		return
 	}
-	var req struct {
-		Announcement string `json:"announcement"`
-	}
+	var req setAnnouncementRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
@@ -435,12 +364,6 @@ func (h *GroupHandler) SetAnnouncement(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500411, "set announcement failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-		EventType:  "group_announcement_updated",
-		OperatorID: operatorUID,
-		Text:       h.operatorName(r, operatorUID) + "更新了群公告",
-		AfterValue: updated.Announcement,
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"announcement": updated.Announcement,
 		"group":        h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
@@ -456,25 +379,16 @@ func (h *GroupHandler) SetMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	targetUID := r.PathValue("uid")
-	var req struct {
-		Role model.MemberRole `json:"role"`
-	}
+	var req setMemberRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
-	updated, err := h.groups.SetMemberRole(r.Context(), group.ChatID, operatorUID, targetUID, req.Role)
+	updated, err := h.members.SetMemberRole(r.Context(), group.ChatID, operatorUID, targetUID, model.MemberRole(req.Role))
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500412, "set member role failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-		EventType:     "member_role_changed",
-		OperatorID:    operatorUID,
-		TargetUserIDs: []string{targetUID},
-		Text:          h.operatorName(r, operatorUID) + "更新了" + h.operatorName(r, targetUID) + "的群角色",
-		AfterValue:    string(req.Role),
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
@@ -488,10 +402,7 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 	if group == nil {
 		return
 	}
-	var req struct {
-		OwnerUID string `json:"owner_uid"`
-		UserID   string `json:"user_id"`
-	}
+	var req transferOwnerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
@@ -504,19 +415,11 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, 400026, "owner_uid is required")
 		return
 	}
-	updated, err := h.groups.TransferOwner(r.Context(), group.ChatID, operatorUID, targetUID)
+	updated, err := h.members.TransferOwner(r.Context(), group.ChatID, operatorUID, targetUID)
 	if err != nil {
 		h.writeGroupServiceError(w, err, 500413, "transfer owner failed")
 		return
 	}
-	h.sendGroupSystemEvent(r, updated, groupSystemEvent{
-		EventType:     "group_owner_transferred",
-		OperatorID:    operatorUID,
-		TargetUserIDs: []string{targetUID},
-		Text:          h.operatorName(r, operatorUID) + "将群主转让给" + h.operatorName(r, targetUID),
-		BeforeValue:   operatorUID,
-		AfterValue:    targetUID,
-	})
 	writeAPISuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
@@ -550,85 +453,6 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
-}
-
-type groupSystemEvent struct {
-	EventType     string
-	OperatorID    string
-	TargetUserIDs []string
-	Text          string
-	BeforeValue   string
-	AfterValue    string
-}
-
-func (h *GroupHandler) sendGroupSystemEvent(r *http.Request, group *model.Group, event groupSystemEvent) {
-	if h.msgSvc == nil || group == nil || event.EventType == "" || event.Text == "" {
-		return
-	}
-	_, _ = h.msgSvc.Send(r.Context(), &messageSvc.SendMessageReq{
-		ChatID:     group.ChatID,
-		ChatType:   types.ChatTypeGroup,
-		SenderID:   event.OperatorID,
-		SenderName: h.operatorName(r, event.OperatorID),
-		MsgType:    types.MessageTypeSystemEvent,
-		Content: types.SystemEventContent{
-			EventType:     event.EventType,
-			Text:          event.Text,
-			Title:         event.Text,
-			OperatorID:    event.OperatorID,
-			TargetUserIDs: event.TargetUserIDs,
-			GroupID:       group.ChatID,
-			GroupName:     group.Name,
-			BeforeValue:   event.BeforeValue,
-			AfterValue:    event.AfterValue,
-		},
-	})
-}
-
-func (h *GroupHandler) operatorName(r *http.Request, uid string) string {
-	if uid == "" {
-		return "系统"
-	}
-	if h.users != nil {
-		if user, err := h.users.FindByID(r.Context(), uid); err == nil && user.Nickname != "" {
-			return user.Nickname
-		}
-	}
-	return uid
-}
-
-func (h *GroupHandler) userListText(r *http.Request, userIDs []string) string {
-	names := make([]string, 0, len(userIDs))
-	for _, uid := range userIDs {
-		names = append(names, h.operatorName(r, uid))
-	}
-	return strings.Join(names, "、")
-}
-
-func withoutUID(items []string, uid string) []string {
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		if item != "" && item != uid {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-func diffNewMembers(before, after []string) []string {
-	seen := make(map[string]bool, len(before))
-	for _, uid := range before {
-		seen[uid] = true
-	}
-	result := make([]string, 0)
-	for _, uid := range after {
-		if uid == "" || seen[uid] {
-			continue
-		}
-		seen[uid] = true
-		result = append(result, uid)
-	}
-	return result
 }
 
 func (h *GroupHandler) writeGroupServiceError(w http.ResponseWriter, err error, fallbackCode int, fallbackMessage string) {
@@ -689,13 +513,4 @@ func uniqueNonEmpty(items []string) []string {
 		result = append(result, item)
 	}
 	return result
-}
-
-func containsUID(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }

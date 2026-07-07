@@ -8,19 +8,9 @@ import (
 	"testing"
 
 	"d-im/internal/gateway/handler/middleware"
-	messageSvc "d-im/internal/message/service"
 	"d-im/pkg/model"
 	"d-im/pkg/types"
 )
-
-type fakeGroupMessageSender struct {
-	requests []*messageSvc.SendMessageReq
-}
-
-func (f *fakeGroupMessageSender) Send(_ context.Context, req *messageSvc.SendMessageReq) (*messageSvc.SendMessageResp, error) {
-	f.requests = append(f.requests, req)
-	return &messageSvc.SendMessageResp{Status: types.MessageStatusSent}, nil
-}
 
 type fakeConversationByChatReader struct {
 	conv *model.Conversation
@@ -30,15 +20,13 @@ func (f fakeConversationByChatReader) GetConversationByChatID(_ context.Context,
 	return f.conv, nil
 }
 
-func TestCreateGroupHandlerSignatureAcceptsGroupAndMemberService(t *testing.T) {
-	// Verify the handler constructor compiles with real service types.
-	messages := &fakeGroupMessageSender{}
+func TestNewGroupHandlerSignature(t *testing.T) {
 	conv := fakeConversationByChatReader{conv: &model.Conversation{
 		ConversationID: "conv_group",
 		ChatID:         "chat_group",
 		ChatType:       types.ChatTypeGroup,
 	}}
-	handler := NewGroupHandler(nil, nil, conv, messages, nil)
+	handler := NewGroupHandler(nil, nil, conv, nil)
 	if handler == nil {
 		t.Fatal("expected handler")
 	}

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
+	"d-im/pkg/mongodb"
 	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -16,15 +18,18 @@ import (
 
 // MemberService 群成员用例服务。
 type MemberService struct {
-	chatRepo *chatRepo.ChatRepo
-	groups   *repository.GroupRepo
-	members  *repository.MemberRepo
-	convMgr  *model.ConversationManager
+	db             *mongo.Database
+	chatRepo       *chatRepo.ChatRepo
+	groups         *repository.GroupRepo
+	members        *repository.MemberRepo
+	convMgr        *model.ConversationManager
+	eventPublisher *EventPublisher
 }
 
 // NewMemberService 创建成员服务。
-func NewMemberService(chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, convMgr *model.ConversationManager) *MemberService {
+func NewMemberService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, convMgr *model.ConversationManager) *MemberService {
 	return &MemberService{
+		db:       db,
 		chatRepo: chatRepo,
 		groups:   groups,
 		members:  members,
@@ -32,8 +37,42 @@ func NewMemberService(chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo,
 	}
 }
 
-// JoinGroup 自由加入公开群。
+// SetEventPublisher 注入事件发布器。
+func (s *MemberService) SetEventPublisher(publisher *EventPublisher) {
+	s.eventPublisher = publisher
+}
+
+func (s *MemberService) publishEvent(ctx context.Context, event GroupSystemEvent) {
+	if s.eventPublisher != nil {
+		s.eventPublisher.Publish(ctx, event)
+	}
+}
+
+// JoinGroup 自由加入公开群（事务包裹）。
 func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.joinGroupInternal(sc, chatID, uid)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "MemberJoined",
+		OperatorUID: uid,
+		TargetUIDs:  []string{uid},
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
+}
+
+func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	group, err := s.groups.FindActiveByChatID(ctx, chatID)
 	if err != nil {
 		return nil, err
@@ -72,8 +111,35 @@ func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*mod
 	return group, nil
 }
 
-// AddMembers 邀请成员入群。
+// AddMembers 邀请成员入群（事务包裹）。
 func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID string, uidList []string) (*model.Group, []string, error) {
+	var result *model.Group
+	var addedUIDs []string
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, added, err := s.addMembersInternal(sc, chatID, operatorUID, uidList)
+		if err != nil {
+			return err
+		}
+		result = group
+		addedUIDs = added
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(addedUIDs) > 0 {
+		s.publishEvent(ctx, GroupSystemEvent{
+			EventType:   "MembersInvited",
+			OperatorUID: operatorUID,
+			TargetUIDs:  addedUIDs,
+			GroupID:     result.ChatID,
+			GroupName:   result.Name,
+		})
+	}
+	return result, addedUIDs, nil
+}
+
+func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operatorUID string, uidList []string) (*model.Group, []string, error) {
 	group, operator, err := s.requireMember(ctx, chatID, operatorUID)
 	if err != nil {
 		return nil, nil, err
@@ -118,8 +184,31 @@ func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID stri
 	return group, adding, nil
 }
 
-// LeaveGroup 退出群。
+// LeaveGroup 退出群（事务包裹）。
 func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.leaveGroupInternal(sc, chatID, uid)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "MemberLeft",
+		OperatorUID: uid,
+		TargetUIDs:  []string{uid},
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
+}
+
+func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	group, member, err := s.requireMember(ctx, chatID, uid)
 	if err != nil {
 		return nil, err
@@ -128,7 +217,7 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 		return nil, fmt.Errorf("%w: owner must transfer owner before leaving", ErrInvalid)
 	}
 	if group.MemberCount <= 1 {
-		return s.DismissGroup(ctx, chatID, uid)
+		return s.dismissGroupInternal(ctx, chatID, uid)
 	}
 	removed, err := s.members.Remove(ctx, chatID, uid)
 	if err != nil {
@@ -148,8 +237,31 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 	return group, nil
 }
 
-// KickMember 踢出群成员。
+// KickMember 踢出群成员（事务包裹）。
 func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.kickMemberInternal(sc, chatID, operatorUID, targetUID)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "MemberKicked",
+		OperatorUID: operatorUID,
+		TargetUIDs:  []string{targetUID},
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
+}
+
+func (s *MemberService) kickMemberInternal(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	group, operator, err := s.requireMember(ctx, chatID, operatorUID)
 	if err != nil {
 		return nil, err
@@ -205,11 +317,48 @@ func (s *MemberService) SetMemberRole(ctx context.Context, chatID, operatorUID, 
 	if _, err := s.members.SetRole(ctx, chatID, targetUID, role); err != nil {
 		return nil, err
 	}
-	return s.groups.FindActiveByChatID(ctx, chatID)
+	result, err := s.groups.FindActiveByChatID(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "MemberRoleChanged",
+		OperatorUID: operatorUID,
+		TargetUIDs:  []string{targetUID},
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+		AfterValue:  string(role),
+	})
+	return result, nil
 }
 
-// TransferOwner 转让群主。
+// TransferOwner 转让群主（事务包裹）。
 func (s *MemberService) TransferOwner(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.transferOwnerInternal(sc, chatID, operatorUID, targetUID)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "OwnerTransferred",
+		OperatorUID: operatorUID,
+		TargetUIDs:  []string{targetUID},
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+		BeforeValue: operatorUID,
+		AfterValue:  targetUID,
+	})
+	return result, nil
+}
+
+func (s *MemberService) transferOwnerInternal(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	group, operator, err := s.requireMember(ctx, chatID, operatorUID)
 	if err != nil {
 		return nil, err
@@ -236,8 +385,30 @@ func (s *MemberService) TransferOwner(ctx context.Context, chatID, operatorUID, 
 	return group, nil
 }
 
-// DismissGroup 解散群（由成员用例内部调用，仅群主）。
+// DismissGroup 解散群（事务包裹）。
 func (s *MemberService) DismissGroup(ctx context.Context, chatID, operatorUID string) (*model.Group, error) {
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.dismissGroupInternal(sc, chatID, operatorUID)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "GroupDismissed",
+		OperatorUID: operatorUID,
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
+}
+
+func (s *MemberService) dismissGroupInternal(ctx context.Context, chatID, operatorUID string) (*model.Group, error) {
 	group, member, err := s.requireMember(ctx, chatID, operatorUID)
 	if err != nil {
 		return nil, err
@@ -250,9 +421,9 @@ func (s *MemberService) DismissGroup(ctx context.Context, chatID, operatorUID st
 		return nil, err
 	}
 	if s.convMgr != nil {
-		memberUIDs, err := s.members.ListUIDs(ctx, group.ChatID)
-		if err != nil {
-			return nil, err
+		memberUIDs, uidsErr := s.members.ListUIDs(ctx, group.ChatID)
+		if uidsErr != nil {
+			return nil, uidsErr
 		}
 		for _, uid := range memberUIDs {
 			if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
@@ -294,4 +465,8 @@ func (s *MemberService) requireMember(ctx context.Context, chatID, uid string) (
 		return nil, nil, err
 	}
 	return group, member, nil
+}
+
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
