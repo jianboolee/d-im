@@ -79,7 +79,7 @@ func main() {
 	chatR := chatRepo.NewChatRepo(db)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
-	groupService := groupSvc.NewGroupService(chatR, gRepo, mRepo, convMgr)
+	groupService := groupSvc.NewGroupService(db, chatR, gRepo, mRepo, convMgr)
 	memberService := groupSvc.NewMemberService(chatR, gRepo, mRepo, convMgr)
 	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convMgr, natsPub)
 	msgSvc.SetGroupReader(groupService)

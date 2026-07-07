@@ -11,6 +11,7 @@ import (
 	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
+	"d-im/pkg/mongodb"
 	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,6 +21,7 @@ import (
 const defaultMaxMembers = 500
 
 type GroupService struct {
+	db              *mongo.Database
 	chatRepo        *chatRepo.ChatRepo
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
@@ -32,8 +34,9 @@ type groupAvatarGenerator interface {
 	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
 }
 
-func NewGroupService(chatRepo *chatRepo.ChatRepo, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
+func NewGroupService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
 	return &GroupService{
+		db:       db,
 		chatRepo: chatRepo,
 		groups:   groupRepo,
 		members:  memberRepo,
@@ -55,6 +58,7 @@ func (s *GroupService) publishEvent(ctx context.Context, event GroupSystemEvent)
 	}
 }
 
+// CreateGroup 创建群（事务包裹 chats + groups + group_members + conversations）。
 func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -64,6 +68,30 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		return nil, ErrInvalid
 	}
 
+	var result *model.Group
+	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
+		group, err := s.createGroupInternal(sc, name, ownerUID, memberUIDs)
+		if err != nil {
+			return err
+		}
+		result = group
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   "GroupCreated",
+		OperatorUID: ownerUID,
+		GroupID:     result.ChatID,
+		GroupName:   result.Name,
+	})
+	s.GenerateGroupAvatarAsync(result.ChatID)
+	return result, nil
+}
+
+// createGroupInternal 创建群的核心逻辑（不发布事件、不触发头像生成），用于事务内部。
+func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	chat, err := s.chatRepo.CreateGroupChat(ctx, ownerUID)
 	if err != nil {
 		return nil, err
@@ -115,7 +143,6 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		}
 	}
 
-	s.GenerateGroupAvatarAsync(chat.ChatID)
 	return group, nil
 }
 
