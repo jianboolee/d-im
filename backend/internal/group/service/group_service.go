@@ -25,6 +25,7 @@ type GroupService struct {
 	members         *repository.MemberRepo
 	convMgr         *model.ConversationManager
 	avatarGenerator groupAvatarGenerator
+	eventPublisher  *EventPublisher
 }
 
 type groupAvatarGenerator interface {
@@ -42,6 +43,16 @@ func NewGroupService(chatRepo *chatRepo.ChatRepo, groupRepo *repository.GroupRep
 
 func (s *GroupService) SetAvatarGenerator(generator groupAvatarGenerator) {
 	s.avatarGenerator = generator
+}
+
+func (s *GroupService) SetEventPublisher(publisher *EventPublisher) {
+	s.eventPublisher = publisher
+}
+
+func (s *GroupService) publishEvent(ctx context.Context, event GroupSystemEvent) {
+	if s.eventPublisher != nil {
+		s.eventPublisher.Publish(ctx, event)
+	}
 }
 
 func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
