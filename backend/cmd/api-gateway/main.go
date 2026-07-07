@@ -15,6 +15,7 @@ import (
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
+	groupAvatar "d-im/internal/group/avatar"
 	groupSvc "d-im/internal/group/service"
 	mediaSvc "d-im/internal/media/service"
 	mediaStorage "d-im/internal/media/storage"
@@ -87,6 +88,7 @@ func main() {
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatColl, uRepo)
 	groupService := groupSvc.NewGroupService(chatColl, convMgr)
+	groupService.SetAvatarGenerator(groupAvatar.NewGenerator(store, uRepo))
 	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)

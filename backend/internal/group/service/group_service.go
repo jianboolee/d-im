@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"d-im/pkg/model"
 	"d-im/pkg/types"
@@ -29,8 +31,9 @@ type UpdateGroupInfo struct {
 
 // GroupService 群组服务
 type GroupService struct {
-	chatColl *mongo.Collection
-	convMgr  *model.ConversationManager
+	chatColl        *mongo.Collection
+	convMgr         *model.ConversationManager
+	avatarGenerator groupAvatarGenerator
 }
 
 // NewGroupService 创建群组服务
@@ -39,6 +42,14 @@ func NewGroupService(chatColl *mongo.Collection, convMgr *model.ConversationMana
 		chatColl: chatColl,
 		convMgr:  convMgr,
 	}
+}
+
+type groupAvatarGenerator interface {
+	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
+}
+
+func (s *GroupService) SetAvatarGenerator(generator groupAvatarGenerator) {
+	s.avatarGenerator = generator
 }
 
 // CreateGroup 创建群聊
@@ -57,7 +68,41 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		return nil, err
 	}
 
+	s.GenerateGroupAvatarAsync(chat.ChatID)
+
 	return chat, nil
+}
+
+// GenerateGroupAvatarAsync 异步生成并回写群宫格头像。
+func (s *GroupService) GenerateGroupAvatarAsync(chatID string) {
+	if s == nil || s.avatarGenerator == nil || strings.TrimSpace(chatID) == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		chat, err := model.FindChatByID(ctx, s.chatColl, chatID)
+		if err != nil {
+			log.Printf("[group] load chat for avatar failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		if !isActiveGroup(chat) || strings.TrimSpace(chat.Avatar) != "" {
+			return
+		}
+
+		avatarURL, err := s.avatarGenerator.GenerateAndStore(ctx, chat.ChatID, chat.Members)
+		if err != nil {
+			log.Printf("[group] generate group avatar failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		if avatarURL == "" {
+			return
+		}
+		if _, err := model.UpdateGroupChatAvatarIfEmpty(ctx, s.chatColl, chat.ChatID, avatarURL); err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("[group] update group avatar failed: chat_id=%s err=%v", chatID, err)
+		}
+	}()
 }
 
 // ListGroupsForMember 查询当前用户加入的群列表。

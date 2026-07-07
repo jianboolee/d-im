@@ -192,6 +192,32 @@ func UpdateGroupChatName(ctx context.Context, coll *mongo.Collection, chatID str
 	return UpdateGroupChatFields(ctx, coll, chatID, bson.M{"name": name})
 }
 
+// UpdateGroupChatAvatarIfEmpty 仅在群头像仍为空时回写头像。
+func UpdateGroupChatAvatarIfEmpty(ctx context.Context, coll *mongo.Collection, chatID string, avatar string) (*Chat, error) {
+	update := bson.M{
+		"$set": bson.M{
+			"avatar":     avatar,
+			"updated_at": time.Now(),
+		},
+	}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+	var chat Chat
+	err := coll.FindOneAndUpdate(ctx, bson.M{
+		"chat_id":   chatID,
+		"chat_type": types.ChatTypeGroup,
+		"$or": bson.A{
+			bson.M{"avatar": ""},
+			bson.M{"avatar": bson.M{"$exists": false}},
+		},
+		"status": bson.M{"$ne": GroupStatusDismissed},
+	}, update, opts).Decode(&chat)
+	if err != nil {
+		return nil, err
+	}
+	return &chat, nil
+}
+
 // DismissGroupChat 解散群聊。
 func DismissGroupChat(ctx context.Context, coll *mongo.Collection, chatID string) (*Chat, error) {
 	update := bson.M{
