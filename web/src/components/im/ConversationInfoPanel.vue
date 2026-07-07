@@ -21,7 +21,7 @@
 
   <ConversationMessageSearchModal
     v-model="showMessageSearch"
-    :conversation-id="conversation?.id || ''"
+    :chat-id="conversation?.chat_id || ''"
   />
 
   <GroupNameEditDrawer

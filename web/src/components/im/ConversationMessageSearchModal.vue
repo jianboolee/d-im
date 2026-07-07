@@ -74,7 +74,7 @@ import type { Message } from '@/sdk/im'
 
 const props = defineProps<{
   modelValue: boolean
-  conversationId: string
+  chatId: string
 }>()
 
 const emit = defineEmits<{
@@ -105,11 +105,11 @@ const clear = () => {
 
 const search = async () => {
   const q = keyword.value.trim()
-  if (!q || !props.conversationId || !imStore.imSDK) return
+  if (!q || !props.chatId || !imStore.imSDK) return
   try {
     searching.value = true
     hasSearched.value = true
-    const page = await imStore.imSDK.searchConversationMessages(props.conversationId, {
+    const page = await imStore.imSDK.searchChatMessages(props.chatId, {
       q,
       limit: 20,
     })
@@ -127,10 +127,10 @@ const search = async () => {
 
 const loadMore = async () => {
   const q = keyword.value.trim()
-  if (!q || !props.conversationId || !imStore.imSDK || !hasMore.value || searching.value) return
+  if (!q || !props.chatId || !imStore.imSDK || !hasMore.value || searching.value) return
   try {
     searching.value = true
-    const page = await imStore.imSDK.searchConversationMessages(props.conversationId, {
+    const page = await imStore.imSDK.searchChatMessages(props.chatId, {
       q,
       limit: 20,
       cursor: nextCursor.value,
@@ -171,7 +171,7 @@ watch(
 )
 
 watch(
-  () => props.conversationId,
+  () => props.chatId,
   () => {
     clear()
   },

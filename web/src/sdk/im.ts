@@ -195,7 +195,7 @@ export enum MessageType {
     limit?: number;
     cursor?: string;
     q?: string;
-    active_conversation_id?: string;
+    active_chat_id?: string;
   }
   
   // 会话状态接口
@@ -282,9 +282,7 @@ export enum MessageType {
     return {
       id,
       client_message_id: raw.client_message_id == null ? undefined : String(raw.client_message_id),
-      conversation_id: raw.conversation_id == null
-        ? (raw.chat_id == null ? undefined : String(raw.chat_id))
-        : String(raw.conversation_id),
+      conversation_id: raw.conversation_id == null ? undefined : String(raw.conversation_id),
       chat_id: raw.chat_id == null ? undefined : String(raw.chat_id),
       seq: raw.sequence == null
         ? (raw.seq_id == null ? (raw.seq == null ? undefined : Number(raw.seq)) : Number(raw.seq_id))
@@ -555,7 +553,7 @@ export enum MessageType {
      * 通过 WebSocket 发送消息
      */
     async sendMessageWS(
-      conversationId: string,
+      chatId: string,
       type: MessageType = MessageType.Text,
       content: MessageContent = {},
       clientMessageId?: string
@@ -569,7 +567,7 @@ export enum MessageType {
         try {
           const message = {
             client_message_id: clientMessageId,
-            conversation_id: conversationId,
+            chat_id: chatId,
             message_type: type,
             content,
           };
@@ -586,7 +584,7 @@ export enum MessageType {
      * 发送消息
      */
     async sendMessage(
-      conversationId: string,
+      chatId: string,
       type: MessageType = MessageType.Text,
       content: MessageContent = {},
       clientMessageId?: string
@@ -598,7 +596,7 @@ export enum MessageType {
           'Authorization': `Bearer ${this.token}`
         },
         body: JSON.stringify({
-          conversation_id: conversationId,
+          chat_id: chatId,
           client_message_id: clientMessageId,
           message_type: type,
           content,
@@ -613,15 +611,14 @@ export enum MessageType {
       return normalizeMessage(unwrapApiResponse<Record<string, unknown>>(json));
     }
   
-    async getConversationMessagePage(conversationId: string, params: MessageQueryParams = {}): Promise<MessagePage> {
+    async getChatMessagePage(chatId: string, params: MessageQueryParams = {}): Promise<MessagePage> {
       const queryParams = new URLSearchParams();
       if (params.limit) queryParams.append('limit', params.limit.toString());
       if (params.cursor) queryParams.append('cursor', params.cursor);
-
       const suffix = queryParams.toString() ? `?${queryParams}` : '';
       const data = await apiRequest<Record<string, unknown>[] | Record<string, unknown>>(
         this.baseURL,
-        `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages${suffix}`,
+        `/api/v1/chats/${encodeURIComponent(chatId)}/messages${suffix}`,
         this.token,
       );
 
@@ -641,16 +638,20 @@ export enum MessageType {
       };
     }
 
-    async getConversationMessages(conversationId: string, params: MessageQueryParams = {}): Promise<Message[]> {
+    async getConversationMessagePage(id: string, params: MessageQueryParams = {}): Promise<MessagePage> {
+      return this.getChatMessagePage(id, params);
+    }
+
+    async getConversationMessages(id: string, params: MessageQueryParams = {}): Promise<Message[]> {
       const cursor = params.cursor
-        ?? (params.before_id ? this.messageHistoryCursors.get(conversationId) : undefined);
-      const page = await this.getConversationMessagePage(conversationId, {
+        ?? (params.before_id ? this.messageHistoryCursors.get(id) : undefined);
+      const page = await this.getChatMessagePage(id, {
         limit: params.limit,
         cursor,
       });
 
       if (!params.after_id) {
-        this.messageHistoryCursors.set(conversationId, page.next_cursor);
+        this.messageHistoryCursors.set(id, page.next_cursor);
       }
 
       return page.items;
@@ -664,8 +665,8 @@ export enum MessageType {
       if (params.limit) queryParams.append('limit', params.limit.toString());
       if (params.cursor) queryParams.append('cursor', params.cursor);
       if (params.q) queryParams.append('q', params.q);
-      if (params.active_conversation_id) {
-        queryParams.append('active_conversation_id', params.active_conversation_id);
+      if (params.active_chat_id) {
+        queryParams.append('active_chat_id', params.active_chat_id);
       }
 
       const suffix = queryParams.toString() ? `?${queryParams}` : '';
@@ -702,6 +703,16 @@ export enum MessageType {
       const data = await apiRequest<Record<string, unknown>>(
         this.baseURL,
         `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+        this.token,
+      );
+
+      return normalizeConversation(data);
+    }
+
+    async getConversationByChatId(chatId: string): Promise<Conversation> {
+      const data = await apiRequest<Record<string, unknown>>(
+        this.baseURL,
+        `/api/v1/chats/${encodeURIComponent(chatId)}/conversation`,
         this.token,
       );
 
@@ -826,8 +837,8 @@ export enum MessageType {
       return normalizeConversation(data);
     }
 
-    async searchConversationMessages(
-      conversationId: string,
+    async searchChatMessages(
+      chatId: string,
       params: MessageSearchParams,
     ): Promise<MessageSearchPage> {
       const queryParams = new URLSearchParams();
@@ -840,7 +851,7 @@ export enum MessageType {
         has_more?: boolean;
       }>(
         this.baseURL,
-        `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/search?${queryParams}`,
+        `/api/v1/chats/${encodeURIComponent(chatId)}/messages/search?${queryParams}`,
         this.token,
       );
 
@@ -849,6 +860,13 @@ export enum MessageType {
         next_cursor: data.next_cursor,
         has_more: Boolean(data.has_more),
       };
+    }
+
+    async searchConversationMessages(
+      chatId: string,
+      params: MessageSearchParams,
+    ): Promise<MessageSearchPage> {
+      return this.searchChatMessages(chatId, params);
     }
   
     /**
@@ -1015,19 +1033,19 @@ export enum MessageType {
     /**
      * 发送文本消息的快捷方法
      */
-    async sendTextMessage(conversationId: string, content: string): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Text, { text: content });
+    async sendTextMessage(chatId: string, content: string): Promise<Message> {
+      return this.sendMessage(chatId, MessageType.Text, { text: content });
     }
   
     /**
      * 发送图片消息的快捷方法
      */
-    async sendImageMessage(
-      conversationId: string,
+  async sendImageMessage(
+    chatId: string,
       url: string,
       meta?: Record<string, string>
     ): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Image, {
+      return this.sendMessage(chatId, MessageType.Image, {
         url,
         width: meta?.width ? Number(meta.width) : undefined,
         height: meta?.height ? Number(meta.height) : undefined,
@@ -1039,12 +1057,12 @@ export enum MessageType {
     /**
      * 发送视频消息的快捷方法
      */
-    async sendVideoMessage(
-      conversationId: string,
+  async sendVideoMessage(
+    chatId: string,
       url: string,
       meta?: Record<string, string>
     ): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Video, {
+      return this.sendMessage(chatId, MessageType.Video, {
         url,
         width: meta?.width ? Number(meta.width) : undefined,
         height: meta?.height ? Number(meta.height) : undefined,
@@ -1057,12 +1075,12 @@ export enum MessageType {
     /**
      * 发送语音消息的快捷方法
      */
-    async sendVoiceMessage(
-      conversationId: string,
+  async sendVoiceMessage(
+    chatId: string,
       url: string,
       meta?: Record<string, string>
     ): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Voice, {
+      return this.sendMessage(chatId, MessageType.Voice, {
         url,
         duration: meta?.duration ? Number(meta.duration) : undefined,
         size: meta?.size ? Number(meta.size) : undefined,
@@ -1073,15 +1091,15 @@ export enum MessageType {
     /**
      * 发送卡片消息的快捷方法
      */
-    async sendCardMessage(
-      conversationId: string,
+  async sendCardMessage(
+    chatId: string,
       title: string,
       description?: string,
       url?: string,
       imageUrl?: string,
       priceText?: string
     ): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Card, {
+      return this.sendMessage(chatId, MessageType.Card, {
         title,
         description,
         action_url: url,
@@ -1093,14 +1111,14 @@ export enum MessageType {
     /**
      * 发送链接消息的快捷方法
      */
-    async sendLinkMessage(
-      conversationId: string,
+  async sendLinkMessage(
+    chatId: string,
       title: string,
       url: string,
       description?: string,
       imageUrl?: string
     ): Promise<Message> {
-      return this.sendMessage(conversationId, MessageType.Link, {
+      return this.sendMessage(chatId, MessageType.Link, {
         title,
         description,
         url,

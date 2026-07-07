@@ -87,7 +87,7 @@ UI 要求：
 - `/` 重定向 `/im/home`
 - `/im/home` 移动端/首页式会话列表
 - `/im/chat` 聊天布局但未选中会话
-- `/im/chat/:conversationId` 聊天布局并选中会话
+- `/im/chat/:chatId` 聊天布局并选中聊天
 - `/im/video-player` 视频消息播放页
 - `/im/enter` 业务系统进入页
 - `/im/login` 无独立登录提示页
@@ -158,7 +158,7 @@ UI 要求：
 分页规则：
 
 - 普通会话列表 page size = 20
-- 首屏调用 `sdk.getConversationPage({ limit: 20, active_conversation_id })`
+- 首屏调用 `sdk.getConversationPage({ limit: 20, active_chat_id })`
 - 加载更多调用 `sdk.getConversationPage({ limit: 20, cursor: nextCursor })`
 - 后端返回 `items`, `next_cursor`, `has_more`
 - `hasMore` 和 `nextCursor` 同时控制是否允许继续加载
@@ -184,8 +184,8 @@ UI 要求：
 
 会话注入：
 
-- 如果收到 WS 消息但会话不在列表中，需要先 `getConversation(conversationId)` 或 `activateConversation(conversationId)` 拉取并 upsert
-- 进入某个 conversationId 时，如果列表没有该会话，调用 `ensureConversationInList(conversationId, { activateIfMissing: true })`
+- 如果收到 WS 消息但会话不在列表中，需要先按 `chat_id` 调用 `getConversationByChatId(chatId)` 拉取并 upsert
+- 进入某个 `chatId` 时，如果列表没有该会话，调用 `ensureConversationByChatId(chatId)`
 - 获取失败时回到 `/im/chat`
 
 **会话列表展示**
@@ -225,7 +225,7 @@ UI 要求：
 
 点击行为：
 
-- 点击非当前会话：清未读，跳转 `/im/chat/:conversationId`
+- 点击非当前会话：清未读，跳转 `/im/chat/:chatId`
 - 侧栏内使用 router.replace
 - 首页列表使用 router.push
 - 点击当前会话：取消选中，跳 `/im/chat`
@@ -245,7 +245,7 @@ UI 要求：
 
 - 进入会话后先确保 SDK 和 WebSocket connected
 - 拉取会话信息、用户信息
-- 调用 `getConversationMessages(conversationId, { limit: 20 })`
+- 调用 `getConversationMessages(chatId, { limit: 20 })`
 - 消息按 created_at 正序排列
 - 首屏加载完成后滚到底部
 - 调用 `markConversationRead()`
@@ -254,7 +254,7 @@ UI 要求：
 
 - 向上滚动到 `scrollTop <= 50` 时加载更早消息
 - 用当前最旧的非 temp 消息 id 作为 `before_id`
-- 请求 `getConversationMessages(conversationId, { limit: 20, before_id })`
+- 请求 `getConversationMessages(chatId, { limit: 20, before_id })`
 - 新旧消息 merge 去重后排序
 - 加载前记录 `oldScrollTop` 和 `oldScrollHeight`
 - 插入历史消息后恢复滚动位置：`newScrollHeight - oldScrollHeight + oldScrollTop`

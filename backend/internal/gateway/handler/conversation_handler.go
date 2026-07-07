@@ -105,6 +105,34 @@ func (h *ConversationHandler) GetConversation(w http.ResponseWriter, r *http.Req
 	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
+// GetConversationByChat 获取当前用户在指定 chat 下的会话视图。
+// GET /api/v1/chats/{id}/conversation
+func (h *ConversationHandler) GetConversationByChat(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.GetUserID(r.Context())
+	if uid == "" {
+		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		return
+	}
+
+	chatID := r.PathValue("id")
+	if chatID == "" {
+		writeAPIError(w, http.StatusBadRequest, 400008, "chat_id is required")
+		return
+	}
+
+	conv, err := h.convSvc.GetConversationByChatID(r.Context(), uid, chatID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			return
+		}
+		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		return
+	}
+
+	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+}
+
 // CreateSingleConversation 创建或获取单聊会话
 // POST /api/v1/conversations/single
 func (h *ConversationHandler) CreateSingleConversation(w http.ResponseWriter, r *http.Request) {

@@ -88,7 +88,10 @@ export function sortConversationsByActivity(conversations: Conversation[]): Conv
 }
 
 function matchesMessage(conversation: Conversation, message: Message): boolean {
-  return Boolean(message.conversation_id && conversation.id === message.conversation_id)
+  return Boolean(
+    (message.conversation_id && conversation.id === message.conversation_id)
+    || (message.chat_id && conversation.chat_id === message.chat_id),
+  )
 }
 
 function maxTime(...values: Array<string | undefined>): string {
@@ -126,14 +129,14 @@ export function applyIncomingMessage(
   conversations: Conversation[],
   message: Message,
   currentUserId: string,
-  activeConversationId?: string,
+  activeChatId?: string,
 ): Conversation[] {
   const index = conversations.findIndex((conversation) => matchesMessage(conversation, message))
 
   if (index === -1) {
     if (!message.conversation_id) return conversations
     const created = buildConversationFromMessage(message, currentUserId)
-    if (activeConversationId && created.id === activeConversationId && message.sender_id !== currentUserId) {
+    if (activeChatId && created.chat_id === activeChatId && message.sender_id !== currentUserId) {
       created.last_read_sequence = Math.max(created.last_read_sequence ?? 0, message.seq ?? 0)
       created.unread_count = 0
     }
@@ -142,7 +145,7 @@ export function applyIncomingMessage(
 
   const existing = conversations[index]!
   const isFromOther = message.sender_id !== currentUserId
-  const isNotActive = existing.id !== activeConversationId
+  const isNotActive = existing.chat_id !== activeChatId
   const isSameLastMessage = Boolean(
     (message.id && existing.last_message?.msg_id === message.id)
     || (message.seq != null && existing.last_message?.sequence === message.seq),

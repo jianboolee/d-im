@@ -13,6 +13,8 @@ export function useAuthCallback() {
 
   async function completeEnter() {
     const ticket = typeof route.query.ticket === 'string' ? route.query.ticket : ''
+    const chatId =
+      typeof route.query.chat_id === 'string' ? route.query.chat_id : ''
     const conversationId =
       typeof route.query.conversation_id === 'string' ? route.query.conversation_id : ''
 
@@ -28,15 +30,25 @@ export function useAuthCallback() {
         console.warn('同步用户信息失败:', fetchError)
       })
 
-      // 无 conversation_id：进入会话列表
+      if (chatId) {
+        await router.replace({ name: 'im-chat', params: { chatId } })
+        imStore.initSDK()
+        return
+      }
+
+      // 无 chat_id：进入会话列表。旧 conversation_id 入口保留一次转换。
       if (!conversationId) {
         await router.replace({ name: 'im-chat-index' })
         imStore.initSDK()
         return
       }
 
-      await router.replace({ name: 'im-chat', params: { conversationId } })
-      imStore.initSDK()
+      const sdk = imStore.initSDK()
+      if (!sdk) {
+        throw new Error('IM SDK 初始化失败')
+      }
+      const conversation = await sdk.getConversation(conversationId)
+      await router.replace({ name: 'im-chat', params: { chatId: conversation.chat_id } })
     } catch (err) {
       console.error('SSO 登录失败:', err)
       error.value = '登录失败，请从业务系统重新进入'

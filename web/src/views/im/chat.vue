@@ -16,7 +16,7 @@
         <ConversationList
           embedded
           navigate-mode="replace"
-          :active-conversation-id="conversationId"
+          :active-chat-id="routeChatId"
         />
         <div ref="sidebarMenuRef" class="sidebar-footer">
           <button
@@ -183,7 +183,7 @@
     <ConversationSearchModal
       v-model="showConversationSearch"
       navigate-mode="replace"
-      :active-conversation-id="conversationId"
+      :active-chat-id="routeChatId"
     />
     <Teleport to="body">
       <div v-if="showNewConversationModal" class="new-conversation-modal" @click.self="closeNewConversationModal">
@@ -323,7 +323,7 @@ import { readImageDimensions, getFileFormat } from '@/utils/file'
 import { uploadIMFile } from '@/utils/upload'
 
 const props = defineProps<{
-  conversationId: string
+  chatId: string
 }>()
 
 const MessageMoreOptions = defineAsyncComponent(() => import('@/components/im/MessageMoreOptions.vue'))
@@ -339,7 +339,7 @@ const {
   clearUnreadForPeer,
   clearUnreadForConversation,
   handleIncomingMessage: updateConversationByMessage,
-  ensureConversationInList,
+  ensureConversationByChatId,
   upsertConversation,
   updateConversationMemberState,
   updateConversationGroupInfo,
@@ -394,11 +394,13 @@ const readReporter = new ReadReporter(
 
 const isConnected = computed(() => imStore.isConnected)
 const currentUserId = computed(() => userStore.userInfo?.id)
-const conversationId = computed(() => props.conversationId)
-const hasSelectedConversation = computed(() => Boolean(conversationId.value))
+const routeChatId = computed(() => props.chatId)
+const currentConversationId = computed(() => conversation.value?.id || '')
+const hasSelectedConversation = computed(() => Boolean(routeChatId.value))
 const inputMinRows = computed(() => (isMobileViewport.value ? 1 : 2))
 const inputMaxRows = computed(() => (isMobileViewport.value ? 10 : 15))
 const timelineItems = computed(() => buildMessageTimeline(messages.value))
+const activeChatId = computed(() => conversation.value?.chat_id || routeChatId.value)
 const isGroupConversation = computed(() => isGroupConversationModel(conversation.value))
 const peerUserId = computed(() => {
   if (!conversation.value || isGroupConversation.value) return ''
@@ -485,7 +487,7 @@ watch(pageTitle, (title) => {
 }, { immediate: true })
 
 watch(messageText, (value) => {
-  const id = conversationId.value
+  const id = routeChatId.value
   if (!id) return
 
   if (value) {
@@ -497,7 +499,7 @@ watch(messageText, (value) => {
 
 watch(
   () => conversations.value.find(
-    (item) => item.id === conversationId.value,
+    (item) => item.chat_id === routeChatId.value,
   ),
   (user) => {
     if (!user) return
@@ -597,8 +599,8 @@ const createSingleConversation = async () => {
     upsertConversation(nextConversation)
     showNewConversationModal.value = false
     newConversationUserId.value = ''
-    await router.replace({ name: 'im-chat', params: { conversationId: nextConversation.id } })
-    requestScrollToConversation(nextConversation.id)
+    await router.replace({ name: 'im-chat', params: { chatId: nextConversation.chat_id } })
+    requestScrollToConversation(nextConversation.chat_id)
   } catch (error) {
     console.error('创建会话失败:', error)
     newConversationError.value = error instanceof Error ? error.message : '创建会话失败'
@@ -642,8 +644,8 @@ const createGroupConversation = async () => {
     newConversationMode.value = 'single'
     newGroupName.value = ''
     newGroupMemberIdsText.value = ''
-    await router.replace({ name: 'im-chat', params: { conversationId: fullConversation.id } })
-    requestScrollToConversation(fullConversation.id)
+    await router.replace({ name: 'im-chat', params: { chatId: fullConversation.chat_id } })
+    requestScrollToConversation(fullConversation.chat_id)
     showToast('群聊已创建')
   } catch (error) {
     console.error('创建群聊失败:', error)
@@ -744,7 +746,10 @@ const chatImages = computed(() =>
 provide('chatImages', chatImages)
 
 const isCurrentChatMessage = (message: ChatMessage) => {
-  return Boolean(message.conversation_id && message.conversation_id === conversationId.value)
+  return Boolean(
+    (message.chat_id && message.chat_id === activeChatId.value)
+    || (message.conversation_id && message.conversation_id === currentConversationId.value),
+  )
 }
 
 const isNearBottom = () => {
@@ -840,10 +845,10 @@ const confirmPendingMessage = (pendingId: string, confirmed: ChatMessage) => {
 const syncConversationByMessage = (message: ChatMessage, shouldScroll = false) => {
   updateConversationByMessage(
     message as Parameters<typeof updateConversationByMessage>[0],
-    conversationId.value,
+    activeChatId.value,
   )
   if (shouldScroll) {
-    requestScrollToConversation(conversationId.value)
+    requestScrollToConversation(activeChatId.value)
   }
 }
 
@@ -869,12 +874,13 @@ const sendMessage = async () => {
   const content = messageText.value.trim()
   const clientMessageId = createClientMessageId()
   messageText.value = ''
-  messageDrafts.delete(conversationId.value)
+  messageDrafts.delete(routeChatId.value)
 
   const tempMessage: ChatMessage = {
     id: `temp-${clientMessageId}`,
     client_message_id: clientMessageId,
-    conversation_id: conversationId.value,
+    conversation_id: currentConversationId.value,
+    chat_id: activeChatId.value,
     sender_id: currentUserId.value,
     type: MessageType.Text,
     content: { text: content },
@@ -889,7 +895,7 @@ const sendMessage = async () => {
 
   try {
     const response = await imStore.imSDK?.sendMessage(
-      conversationId.value,
+      activeChatId.value,
       MessageType.Text,
       { text: content },
       clientMessageId,
@@ -933,7 +939,7 @@ const fetchHistoryMessages = async (loadMore = false) => {
       ? oldestMessage.id
       : undefined
 
-    const response = await imStore.imSDK.getConversationMessages(conversationId.value, {
+    const response = await imStore.imSDK.getConversationMessages(activeChatId.value, {
       limit: pageSize,
       before_id: beforeId,
     })
@@ -984,7 +990,7 @@ const syncLatestMessages = async () => {
         knownMessageIds.add(msg.id)
       }
     }
-    const response = await imStore.imSDK.getConversationMessages(conversationId.value, {
+    const response = await imStore.imSDK.getConversationMessages(activeChatId.value, {
       limit: pageSize,
     })
     const incoming = response
@@ -1008,16 +1014,16 @@ const syncLatestMessages = async () => {
 const syncUnreadState = async () => {
   const maxSequence = getVisibleMaxSequence()
   const localReadSeq = conversation.value?.last_read_sequence ?? 0
-  if (conversationId.value && maxSequence > 0) {
-    readReporter.ack(conversationId.value, localReadSeq)
+  if (currentConversationId.value && maxSequence > 0) {
+    readReporter.ack(currentConversationId.value, localReadSeq)
   }
-  if (conversationId.value && maxSequence > localReadSeq) {
-    readReporter.schedule(conversationId.value, maxSequence)
+  if (currentConversationId.value && maxSequence > localReadSeq) {
+    readReporter.schedule(currentConversationId.value, maxSequence)
   }
   if (!isGroupConversation.value && peerUserId.value) {
     clearUnreadForPeer(peerUserId.value)
   }
-  clearUnreadForConversation(conversationId.value)
+  clearUnreadForConversation(currentConversationId.value)
 }
 
 const getVisibleMaxSequence = () => messages.value.reduce((max, message) => {
@@ -1025,7 +1031,7 @@ const getVisibleMaxSequence = () => messages.value.reduce((max, message) => {
   return Number.isFinite(sequence) && sequence > max ? sequence : max
 }, 0)
 
-const flushReadState = async (targetConversationId = conversationId.value) => {
+const flushReadState = async (targetConversationId = currentConversationId.value) => {
   if (!targetConversationId) return
   try {
     await readReporter.flush(targetConversationId)
@@ -1054,7 +1060,7 @@ const fetchTargetUser = async () => {
   }
 
   const fromConversation = conversations.value.find(
-    (item) => item.id === conversationId.value,
+    (item) => item.chat_id === routeChatId.value,
   )
   const fromConversationPeer = fromConversation?.peer_user_info
   if (fromConversationPeer) {
@@ -1073,7 +1079,7 @@ const fetchTargetUser = async () => {
 }
 
 const fetchConversation = async () => {
-  const existing = conversations.value.find((item) => item.id === conversationId.value)
+  const existing = conversations.value.find((item) => item.chat_id === routeChatId.value)
   if (existing) {
     conversation.value = existing
     mergeConversationUsers(existing)
@@ -1085,16 +1091,16 @@ const fetchConversation = async () => {
   }
 
   try {
-    const ensuredConversation = await ensureConversationInList(conversationId.value)
+    const ensuredConversation = await ensureConversationByChatId(routeChatId.value)
     if (ensuredConversation) {
       conversation.value = ensuredConversation
     }
   } catch {
-    // 路由里的 conversation_id 只打开已有会话，不隐式创建新会话。
+    // 路由里的 chat_id 只打开已有会话，不隐式创建新会话。
     await router.replace({ name: 'im-chat-index' })
     return
   }
-  requestScrollToConversation(conversationId.value)
+  requestScrollToConversation(routeChatId.value)
   if (!conversation.value) return
 
   mergeConversationUsers(conversation.value)
@@ -1124,7 +1130,7 @@ const retryMessage = async (message: ChatMessage) => {
 
   try {
     const response = await imStore.imSDK?.sendMessage(
-      conversationId.value,
+      activeChatId.value,
       message.type ?? MessageType.Text,
       message.content,
       clientMessageId,
@@ -1167,7 +1173,7 @@ const retryUploadImageMessage = async (message: ChatMessage, messageIndex: numbe
     const h = uploaded.height ?? dimensions.height
 
     const response = await imStore.imSDK?.sendMessage(
-      conversationId.value,
+      activeChatId.value,
       MessageType.Image,
       {
         url: uploaded.url,
@@ -1219,7 +1225,8 @@ const handleSelectFile = (file: File, type: string, preview: FilePreview) => {
   const tempMessage: ChatMessage = {
     id: tempMessageId,
     client_message_id: clientMessageId,
-    conversation_id: conversationId.value,
+    conversation_id: currentConversationId.value,
+    chat_id: activeChatId.value,
     sender_id: currentUserId.value,
     type: messageType,
     content_preview: messageType === MessageType.Image ? '[图片]' : '[视频]',
@@ -1261,7 +1268,7 @@ const handleUploadSuccess = async (file: File, type: string, uploaded: { url: st
 
   try {
     const response = await imStore.imSDK?.sendMessage(
-      conversationId.value,
+      activeChatId.value,
       messageType,
       {
         url: uploaded.url,
@@ -1365,7 +1372,7 @@ const initChat = async () => {
     return
   }
 
-  if (!conversationId.value) {
+  if (!routeChatId.value) {
     showConversationInfoDrawer.value = false
     resetChatState()
     restoreMessageDraft('')
@@ -1375,7 +1382,7 @@ const initChat = async () => {
   }
 
   resetChatState()
-  restoreMessageDraft(conversationId.value)
+  restoreMessageDraft(routeChatId.value)
   imStore.initSDK()
   imStore.addMessageHandler(handleNewMessage)
 
@@ -1426,14 +1433,14 @@ watch(
 )
 
 watch(
-  () => props.conversationId,
-  (nextConversationId, prevConversationId) => {
-    if (nextConversationId !== prevConversationId) {
-      if (prevConversationId) {
-        void flushReadState(prevConversationId)
+  () => props.chatId,
+  (nextChatId, prevChatId) => {
+    if (nextChatId !== prevChatId) {
+      if (currentConversationId.value) {
+        void flushReadState(currentConversationId.value)
       }
-      if (prevConversationId && messageText.value) {
-        messageDrafts.set(prevConversationId, messageText.value)
+      if (prevChatId && messageText.value) {
+        messageDrafts.set(prevChatId, messageText.value)
       }
       showConversationInfoDrawer.value = false
       imStore.removeMessageHandler(handleNewMessage)

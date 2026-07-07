@@ -16,9 +16,9 @@
       <div
         v-for="item in conversationItems"
         :key="item.id"
-        :data-conversation-id="item.id"
+        :data-chat-id="item.chatId"
         class="conversation-item"
-        :class="{ 'is-active': activeConversationId === item.id }"
+        :class="{ 'is-active': activeChatId === item.chatId }"
         @click="selectConversation(item)"
       >
         <div class="avatar">
@@ -86,7 +86,7 @@ import type { Conversation } from '@/sdk/im'
 const props = withDefaults(
   defineProps<{
     /** 当前会话，用于高亮 */
-    activeConversationId?: string
+    activeChatId?: string
     /** 嵌入聊天页侧栏时使用（仅影响样式） */
     embedded?: boolean
     /** 点击会话后的路由行为：home 用 push，侧栏用 replace */
@@ -97,7 +97,7 @@ const props = withDefaults(
     searchMode?: boolean
   }>(),
   {
-    activeConversationId: '',
+    activeChatId: '',
     embedded: false,
     navigateMode: 'push',
     searchKeyword: '',
@@ -106,7 +106,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  select: [conversationId: string]
+  select: [chatId: string]
 }>()
 
 const router = useRouter()
@@ -129,7 +129,7 @@ const {
   searchConversations,
   loadMoreSearchConversations,
   handleIncomingMessage,
-  ensureConversationInList,
+  ensureConversationByChatId,
   requestScrollToConversation,
   pendingScrollRequest,
 } = useConversationList()
@@ -177,6 +177,7 @@ const conversationItems = computed(() => {
 
     return {
       id: conversation.id,
+      chatId: conversation.chat_id,
       peerId,
       conversation,
       avatar: getConversationDisplayAvatar(conversation) || profile?.avatar,
@@ -200,24 +201,24 @@ const mergeConversationUsers = (items: Conversation[]) => {
   mergeUsers(users)
 }
 
-const scrollToConversation = (conversationId: string) => {
+const scrollToConversation = (chatId: string) => {
   window.requestAnimationFrame(() => {
     const items = rootRef.value?.querySelectorAll<HTMLElement>('.conversation-item') ?? []
-    const target = Array.from(items).find((item) => item.dataset.conversationId === conversationId)
+    const target = Array.from(items).find((item) => item.dataset.chatId === chatId)
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   })
 }
 
-const selectConversation = async (item: { id: string; peerId: string; conversation: Conversation }) => {
-  if (!item.id) return
+const selectConversation = async (item: { id: string; chatId: string; peerId: string; conversation: Conversation }) => {
+  if (!item.chatId) return
 
-  if (props.searchMode && item.id === props.activeConversationId) {
-    requestScrollToConversation(item.id)
-    emit('select', item.id)
+  if (props.searchMode && item.chatId === props.activeChatId) {
+    requestScrollToConversation(item.chatId)
+    emit('select', item.chatId)
     return
   }
 
-  if (item.id === props.activeConversationId) {
+  if (item.chatId === props.activeChatId) {
     emit('select', '')
     if (props.navigateMode === 'none') return
     const emptyLocation = { name: 'im-chat-index' as const }
@@ -229,11 +230,11 @@ const selectConversation = async (item: { id: string; peerId: string; conversati
     return
   }
 
-  emit('select', item.id)
+  emit('select', item.chatId)
 
   if (props.navigateMode === 'none') return
 
-  const location = { name: 'im-chat' as const, params: { conversationId: item.id } }
+  const location = { name: 'im-chat' as const, params: { chatId: item.chatId } }
   if (props.navigateMode === 'replace') {
     router.replace(location)
     return
@@ -244,7 +245,7 @@ const selectConversation = async (item: { id: string; peerId: string; conversati
 
 const onIncomingMessage = async (message: Parameters<typeof handleIncomingMessage>[0]) => {
   mergeUsers([message.sender_profile])
-  await handleIncomingMessage(message, props.activeConversationId || undefined)
+  await handleIncomingMessage(message, props.activeChatId || undefined)
   mergeConversationUsers(conversations.value)
 }
 
@@ -319,10 +320,10 @@ watch(
 watch(
   pendingScrollRequest,
   async (request) => {
-    if (!request?.conversationId) return
-    await ensureConversationInList(request.conversationId)
+    if (!request?.chatId) return
+    await ensureConversationByChatId(request.chatId)
     await nextTick()
-    scrollToConversation(request.conversationId)
+    scrollToConversation(request.chatId)
   },
 )
 

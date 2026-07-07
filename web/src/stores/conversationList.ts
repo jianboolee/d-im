@@ -28,7 +28,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
   const searchHasMore = ref(false)
   const searchNextCursor = ref<string | undefined>()
   const activeSearchKeyword = ref('')
-  const pendingScrollRequest = ref<{ conversationId: string; nonce: number } | null>(null)
+  const pendingScrollRequest = ref<{ chatId: string; nonce: number } | null>(null)
   const currentUserId = computed(() => useUserStore().userInfo?.id ?? '')
 
   let loadPromise: Promise<void> | null = null
@@ -96,7 +96,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
     searchResults.value = searchResults.value.filter((conversation) => conversation.id !== conversationId)
   }
 
-  async function loadConversations(options: { reset?: boolean; activeConversationId?: string } = {}) {
+  async function loadConversations(options: { reset?: boolean; activeChatId?: string } = {}) {
     if (loadPromise) {
       return loadPromise
     }
@@ -121,7 +121,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
 
         const page = await sdk.getConversationPage({
           limit: PAGE_SIZE,
-          active_conversation_id: options.activeConversationId,
+          active_chat_id: options.activeChatId,
         })
         conversations.value = sortConversationsByActivity(page.items ?? [])
         nextCursor.value = page.next_cursor
@@ -292,14 +292,20 @@ export const useConversationListStore = defineStore('conversationList', () => {
     return searchMorePromise
   }
 
-  async function handleIncomingMessage(message: Message, activeConversationId?: string) {
+  async function handleIncomingMessage(message: Message, activeChatId?: string) {
     const userId = currentUserId.value
     if (!userId) return
-    let knownConversation = message.conversation_id
-      ? conversations.value.some((conversation) => conversation.id === message.conversation_id)
+    let knownConversation = message.conversation_id || message.chat_id
+      ? conversations.value.some((conversation) => (
+        (message.conversation_id && conversation.id === message.conversation_id)
+        || (message.chat_id && conversation.chat_id === message.chat_id)
+      ))
       : false
 
-    if (!knownConversation && message.conversation_id) {
+    if (!knownConversation && message.chat_id) {
+      const conversation = await ensureConversationByChatId(message.chat_id)
+      knownConversation = Boolean(conversation)
+    } else if (!knownConversation && message.conversation_id) {
       const conversation = await ensureConversationInList(message.conversation_id)
       knownConversation = Boolean(conversation)
     }
@@ -309,7 +315,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
       conversations.value,
       message,
       userId,
-      activeConversationId,
+      activeChatId,
     )
   }
 
@@ -357,10 +363,43 @@ export const useConversationListStore = defineStore('conversationList', () => {
     }
   }
 
-  function requestScrollToConversation(conversationId: string) {
-    if (!conversationId) return
+  async function ensureConversationByChatId(chatId: string) {
+    if (!chatId) return null
+
+    const existing = conversations.value.find((conversation) => conversation.chat_id === chatId)
+    if (existing) return existing
+
+    if (loadPromise) {
+      await loadPromise
+      const loaded = conversations.value.find((conversation) => conversation.chat_id === chatId)
+      if (loaded) return loaded
+    }
+
+    const cacheKey = `chat:${chatId}`
+    const pending = ensurePromises.get(cacheKey)
+    if (pending) return pending
+
+    const promise = (async () => {
+      const sdk = ensureImSDK()
+      if (!sdk) return null
+
+      const conversation = await sdk.getConversationByChatId(chatId)
+      upsertConversation(conversation)
+      return conversation
+    })()
+
+    ensurePromises.set(cacheKey, promise)
+    try {
+      return await promise
+    } finally {
+      ensurePromises.delete(cacheKey)
+    }
+  }
+
+  function requestScrollToConversation(chatId: string) {
+    if (!chatId) return
     pendingScrollRequest.value = {
-      conversationId,
+      chatId,
       nonce: ++scrollRequestNonce,
     }
   }
@@ -417,6 +456,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
     updateConversationGroupInfo,
     removeConversation,
     ensureConversationInList,
+    ensureConversationByChatId,
     requestScrollToConversation,
     getPeerUserIds,
     resetConversations,

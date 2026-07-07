@@ -51,8 +51,8 @@ func (s *MemberService) publishEvent(ctx context.Context, event GroupSystemEvent
 // JoinGroup 自由加入公开群（事务包裹）。
 func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.joinGroupInternal(sc, chatID, uid)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.joinGroupInternal(ctx, chatID, uid)
 		if err != nil {
 			return err
 		}
@@ -115,8 +115,8 @@ func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid strin
 func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID string, uidList []string) (*model.Group, []string, error) {
 	var result *model.Group
 	var addedUIDs []string
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, added, err := s.addMembersInternal(sc, chatID, operatorUID, uidList)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, added, err := s.addMembersInternal(ctx, chatID, operatorUID, uidList)
 		if err != nil {
 			return err
 		}
@@ -187,8 +187,8 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 // LeaveGroup 退出群（事务包裹）。
 func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.leaveGroupInternal(sc, chatID, uid)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.leaveGroupInternal(ctx, chatID, uid)
 		if err != nil {
 			return err
 		}
@@ -240,8 +240,8 @@ func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid stri
 // KickMember 踢出群成员（事务包裹）。
 func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.kickMemberInternal(sc, chatID, operatorUID, targetUID)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.kickMemberInternal(ctx, chatID, operatorUID, targetUID)
 		if err != nil {
 			return err
 		}
@@ -335,8 +335,8 @@ func (s *MemberService) SetMemberRole(ctx context.Context, chatID, operatorUID, 
 // TransferOwner 转让群主（事务包裹）。
 func (s *MemberService) TransferOwner(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.transferOwnerInternal(sc, chatID, operatorUID, targetUID)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.transferOwnerInternal(ctx, chatID, operatorUID, targetUID)
 		if err != nil {
 			return err
 		}
@@ -388,8 +388,8 @@ func (s *MemberService) transferOwnerInternal(ctx context.Context, chatID, opera
 // DismissGroup 解散群（事务包裹）。
 func (s *MemberService) DismissGroup(ctx context.Context, chatID, operatorUID string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.dismissGroupInternal(sc, chatID, operatorUID)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.dismissGroupInternal(ctx, chatID, operatorUID)
 		if err != nil {
 			return err
 		}

@@ -11,6 +11,7 @@
 - `handler` 只做 HTTP 适配，不拼系统事件文案，不做业务副作用。
 - `service` 承载用例编排和业务规则；仓储只做数据访问。
 - 重要写路径需要明确事务边界，不能留下半成品数据。
+- 群信息变更通过 NATS 事件驱动，实现推送闭环。
 
 ## 目标目录结构
 
@@ -21,7 +22,7 @@ backend/internal/group/
     member_service.go
     permission_service.go
     event_publisher.go
-    avatar_service.go
+    avatar_service.go       ← 当前逻辑在 group_service.go 的 GenerateGroupAvatarAsync 中
     ports.go
     errors.go
     types.go
@@ -29,6 +30,10 @@ backend/internal/group/
   repository/
     group_repo.go
     member_repo.go
+
+  adapter/
+    nats_event_adapter.go   ← SystemEventPort 的 NATS 实现，发布到 dim.group.*
+    group_push_consumer.go  ← 订阅 dim.group.*，转为 im.push.message.{uid} 推送
 
   avatar/
     generator.go
@@ -62,7 +67,40 @@ backend/cmd/migrate/
 
 ```text
 backend/cmd/group/
-  main.go
+  main.go     ← group 服务独立进程，启动 GroupPushConsumer 订阅 dim.group.*
+```
+
+## NATS 事件主题约定
+
+| 事件类型 | NATS 主题 | 触发时机 |
+|---------|----------|---------|
+| `GroupCreated` | `dim.group.group_created` | 创建群事务成功后 |
+| `GroupDismissed` | `dim.group.group_dismissed` | 解散群事务成功后 |
+| `GroupInfoUpdated` | `dim.group.group_info_updated` | UpdateInfo / UpdateSettings 成功后 |
+| `AvatarUpdated` | `dim.group.avatar_updated` | 异步头像生成写入后 |
+| `MembersInvited` | `dim.group.members_invited` | 邀请成员事务成功后 |
+| `MemberJoined` | `dim.group.member_joined` | 加入群事务成功后 |
+| `MemberLeft` | `dim.group.member_left` | 退出群事务成功后 |
+| `MemberKicked` | `dim.group.member_kicked` | 踢人事务成功后 |
+| `MemberRoleChanged` | `dim.group.member_role_changed` | 角色变更成功后 |
+| `OwnerTransferred` | `dim.group.owner_transferred` | 转让群主事务成功后 |
+| `AnnouncementUpdated` | `dim.group.announcement_updated` | 设置公告成功后 |
+
+## 事件推送闭环
+
+```text
+群信息变更 / 成员变更
+  → service 执行用例成功
+  → EventPublisher.Publish(event) → SystemEventPort (NATS adapter)
+  → NATS: dim.group.{event_type}
+      ↓
+      GroupPushConsumer（cmd/group 进程内）
+        → 查询群成员 UID 列表 + 群最新快照
+        → 构建 GroupUpdatePayload (event + group 完整信息)
+        → 对每个成员发布到 NATS: im.push.message.{uid}
+            ↓
+            Connector（已有，无需改动）
+              → WebSocket → 客户端收到 group_updated 事件
 ```
 
 ## 文件职责
@@ -193,6 +231,8 @@ backend/cmd/group/
   - 解散群
 - 编排 `Chat` 创建、`Group` 创建、初始成员创建、初始会话视图创建。
 - 在用例成功后调用事件发布器和头像服务。
+- 在群信息/设置/公告变更后发布对应的领域事件（`GroupInfoUpdated` / `AnnouncementUpdated`）。
+- 异步头像生成完成后发布 `AvatarUpdated` 事件。
 - 通过 `ChatRepository` 或 `ChatPort` 创建群聊消息会话，不直接调用 model 层 DB 函数。
 
 不做：
@@ -218,6 +258,7 @@ backend/cmd/group/
 - 负责维护 `groups.member_count` 与 `group_members` 的一致性。
 - 负责成员变更后创建或标记会话视图。
 - 自由加入群属于成员用例，但群加入策略检查委托给 `permission_service.go`。
+- 用例成功后发布对应的领域事件（`MemberJoined` / `MembersInvited` / `MemberLeft` / `MemberKicked` / `MemberRoleChanged` / `OwnerTransferred` / `GroupDismissed`）。
 
 不做：
 
@@ -286,39 +327,50 @@ const (
 
 职责：
 
-- 定义群领域事件类型。
-- 将群领域事件发布到系统事件通道。
-- 当前阶段通过 `SystemEventPort` 发送 `system_event` 消息；后续可替换为 NATS 领域事件。
-- 统一维护系统事件文案。
-- 明确依赖方向为 `event_publisher -> SystemEventPort -> message service`，不能直接依赖 Message Service 具体类型。
-- 接收结构化事件数据（非 `map[string]any`），内部根据事件类型生成文案。
+- 定义群领域事件类型常量（11 个标准事件类型）。
+- 定义 `GroupSystemEvent` 结构化事件数据。
+- 定义 `GroupUpdatePayload` 推送载荷（含完整 `Group` 快照）。
+- 通过 `SystemEventPort` 将事件发布到 NATS（主题：`dim.group.{event_type}`）。
+- 事件发布为 best-effort，不阻塞主流程。
 
 事件数据结构：
 
 ```go
 type GroupSystemEvent struct {
-    EventType   string   // GroupCreated / MembersInvited / ...
-    OperatorUID string
-    TargetUIDs  []string
-    GroupID     string
-    GroupName   string
-    BeforeValue string
-    AfterValue  string
+    EventType   string   `json:"event_type"`
+    OperatorUID string   `json:"operator_uid"`
+    TargetUIDs  []string `json:"target_uids,omitempty"`
+    GroupID     string   `json:"group_id"`
+    GroupName   string   `json:"group_name"`
+    BeforeValue string   `json:"before_value,omitempty"`
+    AfterValue  string   `json:"after_value,omitempty"`
+    Text        string   `json:"text,omitempty"`
+}
+
+type GroupUpdatePayload struct {
+    Event   string       `json:"event"`
+    GroupID string       `json:"group_id"`
+    Group   *model.Group `json:"group"`
 }
 ```
 
-典型事件类型：
+事件类型常量：
 
-- `GroupCreated`
-- `GroupDismissed`
-- `GroupInfoUpdated`
-- `MembersInvited`
-- `MemberJoined`
-- `MemberLeft`
-- `MemberKicked`
-- `MemberRoleChanged`
-- `OwnerTransferred`
-- `AnnouncementUpdated`
+```go
+const (
+    EventTypeGroupCreated        = "GroupCreated"
+    EventTypeGroupDismissed      = "GroupDismissed"
+    EventTypeGroupInfoUpdated    = "GroupInfoUpdated"
+    EventTypeAvatarUpdated       = "AvatarUpdated"
+    EventTypeMembersInvited      = "MembersInvited"
+    EventTypeMemberJoined        = "MemberJoined"
+    EventTypeMemberLeft          = "MemberLeft"
+    EventTypeMemberKicked        = "MemberKicked"
+    EventTypeMemberRoleChanged   = "MemberRoleChanged"
+    EventTypeOwnerTransferred    = "OwnerTransferred"
+    EventTypeAnnouncementUpdated = "AnnouncementUpdated"
+)
+```
 
 不做：
 
@@ -333,6 +385,7 @@ type GroupSystemEvent struct {
 - 通过 `MemberRepository` 或只读 `MemberQueryPort` 读取成员 UID。
 - 调用 `avatar.Generator` 生成九宫格头像。
 - 头像为空时回写 `groups.avatar`。
+- 异步头像生成完成后通过事件发布器发布 `AvatarUpdated` 事件。
 
 不做：
 
@@ -363,7 +416,7 @@ type ConversationPort interface {
 }
 
 type SystemEventPort interface {
-    SendGroupSystemEvent(ctx context.Context, event GroupSystemEvent) error
+    PublishGroupSystemEvent(ctx context.Context, event GroupSystemEvent) error
 }
 
 type GroupQueryPort interface {
@@ -384,7 +437,7 @@ type GroupPermissionPort interface {
 
 设计权衡：
 
-按照 Go 惯用法，“接口由使用方定义”，`GroupQueryPort` 和 `GroupPermissionPort`
+按照 Go 惯用法，"接口由使用方定义"，`GroupQueryPort` 和 `GroupPermissionPort`
 的理想位置是 conversation 域和 message 域各自的包内。当前方案选择集中在 group
 域定义所有 port，主要是为了：
 
@@ -431,6 +484,27 @@ type InviteMembersResult struct {
 }
 ```
 
+### `backend/internal/group/adapter/nats_event_adapter.go`
+
+职责：
+
+- 实现 `SystemEventPort`，将 `GroupSystemEvent` JSON 序列化后发布到 NATS。
+- 主题命名：`dim.group.{snake_case_event_type}`（如 `dim.group.group_created`）。
+- 不生成中文文案，不查询用户信息，只负责传输结构化数据。
+
+### `backend/internal/group/adapter/group_push_consumer.go`
+
+职责：
+
+- 作为 NATS subscriber 订阅 `dim.group.>` 主题。
+- 收到事件后查询群成员列表 + 群最新快照。
+- 构建 `GroupUpdatePayload`（含完整 Group 信息）。
+- 对每个在线成员发布到 `im.push.message.{uid}`（复用已有的 Connector 推送通道）。
+
+不做：
+
+- 不自己推送 WebSocket，委托给 Connector 已有的 `im.push.message.*` 机制。
+
 ### `backend/internal/gateway/handler/group_handler.go`
 
 职责：
@@ -463,6 +537,7 @@ type InviteMembersResult struct {
 - `updateSettingsRequest`
 - `setMemberRoleRequest`
 - `transferOwnerRequest`
+- `setAnnouncementRequest`
 
 ### `backend/internal/gateway/handler/group_response.go`
 
@@ -503,8 +578,8 @@ type InviteMembersResult struct {
 职责：
 
 - group 服务独立进程入口。
-- 组装 group service、repository、事件发布、头像生成等依赖。
-- 加载配置并启动 group 相关传输层。
+- 启动 `GroupPushConsumer`，订阅 NATS `dim.group.*` 事件。
+- 将群领域事件转为 `im.push.message.{uid}` 推送给在线成员。
 
 不做：
 
@@ -522,8 +597,12 @@ handler
       -> avatar service
 
 event publisher
-  -> system event port
-      -> message service
+  -> system event port (NATS adapter)
+      -> NATS: dim.group.*
+          -> GroupPushConsumer（cmd/group 进程）
+              -> repository (查询成员 + 群快照)
+              -> NATS: im.push.message.{uid}
+                  -> Connector → WebSocket → 客户端
 
 message service
   -> group permission port / group query port
@@ -539,6 +618,7 @@ conversation handler
 - `model` 不依赖 internal 包。
 - `event_publisher` 不依赖 Message Service 具体类型，只依赖 `SystemEventPort`。
 - `avatar_service` 不依赖完整 `member_service`，只依赖成员只读查询能力。
+- `adapter` 不依赖 `gateway/handler` 包。
 
 ## 数据事实源
 
@@ -579,14 +659,15 @@ conversation handler
 
 ## 落地顺序
 
-1. 新建 `internal/chat/repository/chat_repo.go`，把 `pkg/model/chat.go` 中的 MongoDB 操作迁移过去。
-2. 把 `GroupMember` 和 `MemberRole` 从 `pkg/model/group.go` 拆分到 `pkg/model/group_member.go`。
-3. 拆 service 文件和接口（`group_service.go` / `member_service.go` / `permission_service.go` / `errors.go` / `types.go`），不改业务行为，通过 port/repository 调用。
-4. 把系统事件从 handler 移到 `event_publisher.go`。
-5. 引入事务封装，覆盖关键写路径。
-6. 拆 handler request/response 文件。
-7. 补单元测试和 handler/service 集成测试。
-8. 最后清理旧 helper、旧字段（`GroupID`、`Admins`、`MutedMembers`）和过渡逻辑。
+- [x] 1. 新建 `internal/chat/repository/chat_repo.go`，把 `pkg/model/chat.go` 中的 MongoDB 操作迁移过去。
+- [x] 2. 把 `GroupMember` 和 `MemberRole` 从 `pkg/model/group.go` 拆分到 `pkg/model/group_member.go`。
+- [x] 3. 拆 service 文件和接口，不改业务行为，通过 port/repository 调用。
+- [x] 4. 把系统事件从 handler 移到 `event_publisher.go`，通过 NATS 适配器解耦。
+- [x] 5. 引入事务封装，覆盖关键写路径（创建群/邀请/退出/踢人/解散/转让）。
+- [x] 6. 拆 handler request/response 文件。
+- [x] 7. 群信息变更闭环：事件发布 + PushConsumer + cmd/group 进程。
+- [ ] 8. 补单元测试和 handler/service 集成测试。
+- [ ] 9. 最后清理旧 helper、旧字段（`GroupID`、`Admins`、`MutedMembers`）和过渡逻辑。
 
 ## 验收标准
 
@@ -598,5 +679,6 @@ conversation handler
 - Conversation Handler 只通过 group query port 组装群会话信息。
 - 群成员只以 `group_members` 为准，群聊不维护 `Chat.Members`。
 - 成员禁言只以 `GroupMember.IsMuted` 和 `GroupMember.MutedUntil` 为准。
+- 群信息变更通过 NATS 事件通知所有在线成员，实现推送闭环。
 - `go test ./...` 通过。
 - 旧数据可以通过 `cmd/migrate` 幂等迁移。

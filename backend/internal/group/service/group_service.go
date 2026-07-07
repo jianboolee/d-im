@@ -69,8 +69,8 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 	}
 
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(sc mongo.SessionContext) error {
-		group, err := s.createGroupInternal(sc, name, ownerUID, memberUIDs)
+	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		group, err := s.createGroupInternal(ctx, name, ownerUID, memberUIDs)
 		if err != nil {
 			return err
 		}

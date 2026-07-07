@@ -30,7 +30,7 @@
         <ConversationList
           embedded
           search-mode
-          :active-conversation-id="activeConversationId"
+          :active-chat-id="activeChatId"
           :navigate-mode="navigateMode"
           :search-keyword="keyword"
           @select="handleSelect"
@@ -47,18 +47,18 @@ import ConversationList from '@/components/im/ConversationList.vue'
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
-    activeConversationId?: string
+    activeChatId?: string
     navigateMode?: 'push' | 'replace' | 'none'
   }>(),
   {
-    activeConversationId: '',
+    activeChatId: '',
     navigateMode: 'replace',
   },
 )
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  select: [conversationId: string]
+  select: [chatId: string]
 }>()
 
 const keyword = ref('')
@@ -68,8 +68,8 @@ const close = () => {
   emit('update:modelValue', false)
 }
 
-const handleSelect = (conversationId: string) => {
-  emit('select', conversationId)
+const handleSelect = (chatId: string) => {
+  emit('select', chatId)
   close()
 }
 

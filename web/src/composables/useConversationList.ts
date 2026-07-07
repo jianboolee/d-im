@@ -18,6 +18,7 @@ export function useConversationList() {
     updateConversationGroupInfo: store.updateConversationGroupInfo,
     removeConversation: store.removeConversation,
     ensureConversationInList: store.ensureConversationInList,
+    ensureConversationByChatId: store.ensureConversationByChatId,
     requestScrollToConversation: store.requestScrollToConversation,
     getPeerUserIds: store.getPeerUserIds,
     resetConversations: store.resetConversations,

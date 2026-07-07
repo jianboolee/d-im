@@ -37,10 +37,10 @@ const router = createRouter({
           path: 'chat',
           name: 'im-chat-index',
           component: () => import('@/views/im/chat.vue'),
-          props: { conversationId: '' },
+          props: { chatId: '' },
         },
         {
-          path: 'chat/:conversationId',
+          path: 'chat/:chatId',
           name: 'im-chat',
           component: () => import('@/views/im/chat.vue'),
           props: true,

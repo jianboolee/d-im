@@ -37,7 +37,7 @@ func TestParseSystemEventContent(t *testing.T) {
 }
 
 func TestSendMessageRejectsClientSystemEvent(t *testing.T) {
-	handler := NewMessageHandler(nil, nil, nil)
+	handler := NewMessageHandler(nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", bytes.NewBufferString(`{
 		"conversation_id": "conv_001",
 		"message_type": "system_event",
