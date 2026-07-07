@@ -10,6 +10,7 @@ import (
 	"d-im/pkg/model"
 	"d-im/pkg/types"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -252,7 +253,7 @@ func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Mes
 			ChatID:     msg.ChatID,
 			MsgID:      msg.MsgID,
 			MessageSeq: msg.Seq,
-			SeqID:      s.idGen.Generate(),
+			SeqID:      uuid.Must(uuid.NewV7()).String(),
 			Status:     types.MessageStatusSent,
 		}
 		mailboxes = append(mailboxes, senderMailbox)
@@ -269,7 +270,7 @@ func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Mes
 			ChatID:     msg.ChatID,
 			MsgID:      msg.MsgID,
 			MessageSeq: msg.Seq,
-			SeqID:      s.idGen.Generate(),
+			SeqID:      uuid.Must(uuid.NewV7()).String(),
 			Status:     types.MessageStatusDelivered,
 		}
 		mailboxes = append(mailboxes, mailbox)

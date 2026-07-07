@@ -3,8 +3,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 
 	"d-im/pkg/model"
 	"d-im/pkg/types"
@@ -13,36 +11,34 @@ import (
 )
 
 // SingleRouter 单聊路由策略
-type SingleRouter struct{}
-
-// NewSingleRouter 创建单聊路由器
-func NewSingleRouter() *SingleRouter {
-	return &SingleRouter{}
+type SingleRouter struct {
+	chatColl *mongo.Collection
 }
 
-// Route 单聊路由：chatID格式为 single_uid1_uid2，接收者是非发送者的另一方
+// NewSingleRouter 创建单聊路由器
+func NewSingleRouter(chatColl *mongo.Collection) *SingleRouter {
+	return &SingleRouter{chatColl: chatColl}
+}
+
+// Route 单聊路由：查询会话成员，接收者是非发送者的另一方。
 func (r *SingleRouter) Route(chatID string, fromUID string) (*RouteResult, error) {
-	if !strings.HasPrefix(chatID, "single_") {
-		return nil, fmt.Errorf("invalid single chat id: %s", chatID)
+	if r.chatColl == nil {
+		return &RouteResult{
+			ChatID:   chatID,
+			ChatType: types.ChatTypeSingle,
+		}, nil
 	}
 
-	// 单聊 chatID = "single_uidA_uidB"
-	parts := strings.SplitN(chatID, "_", 3)
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid single chat id format: %s", chatID)
+	members, err := model.GetChatMembers(context.Background(), r.chatColl, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("get single chat members: %w", err)
 	}
 
-	uid1 := parts[1]
-	uid2 := parts[2]
-
-	var targetUIDs []string
-	if uid1 == fromUID {
-		targetUIDs = append(targetUIDs, uid2)
-	} else if uid2 == fromUID {
-		targetUIDs = append(targetUIDs, uid1)
-	} else {
-		// 发送者不在会话中
-		targetUIDs = append(targetUIDs, uid1, uid2)
+	targetUIDs := make([]string, 0, len(members))
+	for _, uid := range members {
+		if uid != fromUID {
+			targetUIDs = append(targetUIDs, uid)
+		}
 	}
 
 	return &RouteResult{
@@ -88,11 +84,4 @@ func (r *GroupRouter) Route(chatID string, fromUID string) (*RouteResult, error)
 		ChatType:   types.ChatTypeGroup,
 		TargetUIDs: targetUIDs,
 	}, nil
-}
-
-// GenerateSingleChatID 生成单聊会话ID（排序保证唯一性）
-func GenerateSingleChatID(uid1, uid2 string) string {
-	uids := []string{uid1, uid2}
-	sort.Strings(uids)
-	return fmt.Sprintf("single_%s_%s", uids[0], uids[1])
 }

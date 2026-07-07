@@ -14,7 +14,6 @@ import (
 	"d-im/pkg/config"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
-	"d-im/pkg/snowflake"
 )
 
 func main() {
@@ -40,27 +39,18 @@ func main() {
 		log.Fatalf("mongodb: %v", err)
 	}
 
-	// 3. 雪花ID
-	idGen, err := snowflake.NewGenerator(snowflake.Config{
-		WorkerID:     cfg.Snowflake.WorkerID,
-		DatacenterID: cfg.Snowflake.DatacenterID,
-	})
-	if err != nil {
-		log.Fatalf("snowflake: %v", err)
-	}
-
-	// 4. 初始化
+	// 3. 初始化
 	chatColl := model.ChatCollection(db)
 	msgRepo := repository.NewMessageRepo(db)
-	msgSvc := service.NewMessageService(msgRepo, idGen, chatColl, nil, nil)
+	msgSvc := service.NewMessageService(msgRepo, chatColl, nil, nil)
 
-	// 5. 启动分发器
-	d := dispatcher.NewDispatcher(msgRepo, idGen, 4)
+	// 4. 启动分发器
+	d := dispatcher.NewDispatcher(msgRepo, 4)
 	d.Start(ctx)
 
 	log.Printf("[message] started, msg_svc=%v", msgSvc != nil)
 
-	// 6. 等待退出
+	// 5. 等待退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

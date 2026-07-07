@@ -62,7 +62,7 @@ func main() {
 		{"admin", "user_c", "您的订单 #20260705-001 已经发货，请注意查收"},
 	}
 	for _, t := range texts {
-		chatID := model.GenerateSingleChatID(t.from, t.to)
+		chatID := model.GenerateChatID()
 		_, err := apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
 			"chat_id":     chatID,
 			"chat_type":   "single",
@@ -80,7 +80,7 @@ func main() {
 
 	// 5. 发送卡片消息
 	fmt.Println("\n=== 5. 发送卡片消息 ===")
-	cardChatID := model.GenerateSingleChatID("admin", "user_a")
+	cardChatID := model.GenerateChatID()
 	_, err = apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
 		"chat_id":     cardChatID,
 		"chat_type":   "single",

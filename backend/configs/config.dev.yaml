@@ -41,10 +41,6 @@ nats:
     user_status: dsaas.user.status_changed
     user_deleted: dsaas.user.deleted
 
-snowflake:
-  worker_id: 1
-  datacenter_id: 1
-
 jwt:
   secret: im-secret-key-change-me
   access_expire: 15m

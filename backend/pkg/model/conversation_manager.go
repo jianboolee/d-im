@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"d-im/pkg/mongodb"
-	"d-im/pkg/snowflake"
 	"d-im/pkg/types"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -24,19 +24,17 @@ type ConversationCursor struct {
 // ConversationManager 会话视图管理器
 type ConversationManager struct {
 	convColl *mongo.Collection
-	idGen    *snowflake.Generator
 }
 
 // NewConversationManager 创建会话管理器
-func NewConversationManager(db *mongo.Database, idGen *snowflake.Generator) *ConversationManager {
+func NewConversationManager(db *mongo.Database) *ConversationManager {
 	return &ConversationManager{
 		convColl: db.Collection(mongodb.CollectionConversations),
-		idGen:    idGen,
 	}
 }
 
 func (m *ConversationManager) GenerateConversationID() string {
-	return "conv_" + m.idGen.GenerateString()
+	return "conv_" + uuid.Must(uuid.NewV7()).String()
 }
 
 // CreateOrUpdate 为用户创建或更新会话视图（upsert）

@@ -37,9 +37,9 @@ func ChatCollection(db *mongo.Database) *mongo.Collection {
 	return db.Collection("chats")
 }
 
-// GenerateChatID 生成不可语义化的会话实体ID（UUID v7）。
+// GenerateChatID 生成会话实体ID（UUID v7）。
 func GenerateChatID() string {
-	return "chat_" + uuid.Must(uuid.NewV7()).String()
+	return uuid.Must(uuid.NewV7()).String()
 }
 
 // GenerateSingleChatKey 生成单聊幂等键。它只用于唯一约束，不作为公开会话ID。
@@ -49,24 +49,16 @@ func GenerateSingleChatKey(uid1, uid2 string) string {
 	return fmt.Sprintf("%s:%s", uids[0], uids[1])
 }
 
-// GenerateSingleChatID 保留给旧 demo/脚本兼容；真实创建逻辑不再为新会话使用语义化ID。
-func GenerateSingleChatID(uid1, uid2 string) string {
-	uids := []string{uid1, uid2}
-	sort.Strings(uids)
-	return fmt.Sprintf("single_%s_%s", uids[0], uids[1])
-}
-
 // CreateOrGetSingleChat 获取或创建单聊会话
 func CreateOrGetSingleChat(ctx context.Context, coll *mongo.Collection, uid1, uid2 string) (*Chat, error) {
 	singleKey := GenerateSingleChatKey(uid1, uid2)
-	legacyChatID := GenerateSingleChatID(uid1, uid2)
 	chatID := GenerateChatID()
 	now := time.Now()
 
-	filter := bson.M{"$or": bson.A{
-		bson.M{"chat_type": types.ChatTypeSingle, "single_key": singleKey},
-		bson.M{"chat_id": legacyChatID},
-	}}
+	filter := bson.M{
+		"chat_type":  types.ChatTypeSingle,
+		"single_key": singleKey,
+	}
 	update := bson.M{
 		"$setOnInsert": bson.M{
 			"chat_id":      chatID,

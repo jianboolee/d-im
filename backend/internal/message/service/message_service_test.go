@@ -6,17 +6,11 @@ import (
 	"time"
 
 	"d-im/pkg/model"
-	"d-im/pkg/snowflake"
 	"d-im/pkg/types"
 )
 
 func TestGenerateMsgIDUsesMessagePrefix(t *testing.T) {
-	idGen, err := snowflake.NewGenerator(snowflake.Config{WorkerID: 1, DatacenterID: 1})
-	if err != nil {
-		t.Fatalf("new snowflake generator: %v", err)
-	}
-
-	svc := NewMessageService(nil, idGen, nil, nil, nil)
+	svc := NewMessageService(nil, nil, nil, nil)
 	msgID := svc.GenerateMsgID()
 	if !strings.HasPrefix(msgID, "msg_") {
 		t.Fatalf("expected msg_ prefix, got %q", msgID)
@@ -42,7 +36,7 @@ func TestBuildWSMessageDTOUsesReceiverMailboxView(t *testing.T) {
 		UpdatedAt:      now,
 	}
 	mailbox := &model.UserMailbox{
-		SeqID:  1001,
+		SeqID:  "1001",
 		Status: types.MessageStatusDelivered,
 	}
 	conv := &model.Conversation{

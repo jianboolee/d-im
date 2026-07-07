@@ -10,16 +10,15 @@ import (
 
 // Config 全局配置结构体
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`
-	Auth      AuthConfig      `mapstructure:"auth"`
-	Server    ServerConfig    `mapstructure:"server"`
-	MongoDB   MongoDBConfig   `mapstructure:"mongodb"`
-	Redis     RedisConfig     `mapstructure:"redis"`
-	NATS      NATSConfig      `mapstructure:"nats"`
-	Snowflake SnowflakeConfig `mapstructure:"snowflake"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	Log       LogConfig       `mapstructure:"log"`
-	Storage   StorageConfig   `mapstructure:"storage"`
+	App     AppConfig     `mapstructure:"app"`
+	Auth    AuthConfig    `mapstructure:"auth"`
+	Server  ServerConfig  `mapstructure:"server"`
+	MongoDB MongoDBConfig `mapstructure:"mongodb"`
+	Redis   RedisConfig   `mapstructure:"redis"`
+	NATS    NATSConfig    `mapstructure:"nats"`
+	JWT     JWTConfig     `mapstructure:"jwt"`
+	Log     LogConfig     `mapstructure:"log"`
+	Storage StorageConfig `mapstructure:"storage"`
 }
 
 type AppConfig struct {
@@ -78,11 +77,6 @@ type NATSSubjects struct {
 	UserUpdated  string `mapstructure:"user_updated"`
 	UserStatus   string `mapstructure:"user_status"`
 	UserDeleted  string `mapstructure:"user_deleted"`
-}
-
-type SnowflakeConfig struct {
-	WorkerID     int64 `mapstructure:"worker_id"`
-	DatacenterID int64 `mapstructure:"datacenter_id"`
 }
 
 type JWTConfig struct {

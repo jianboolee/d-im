@@ -26,7 +26,6 @@ import (
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
 	natsq "d-im/pkg/queue/nats"
-	"d-im/pkg/snowflake"
 )
 
 func main() {
@@ -48,14 +47,6 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("mongodb: %v", err)
-	}
-
-	idGen, err := snowflake.NewGenerator(snowflake.Config{
-		WorkerID:     cfg.Snowflake.WorkerID,
-		DatacenterID: cfg.Snowflake.DatacenterID,
-	})
-	if err != nil {
-		log.Fatalf("snowflake: %v", err)
 	}
 
 	accessExpire, _ := time.ParseDuration(cfg.JWT.AccessExpire)
@@ -81,9 +72,9 @@ func main() {
 	defer natsPub.Close()
 
 	msgRepo := repository.NewMessageRepo(db)
-	convMgr := model.NewConversationManager(db, idGen)
+	convMgr := model.NewConversationManager(db)
 	chatColl := model.ChatCollection(db)
-	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatColl, convMgr, natsPub)
+	msgSvc := messageSvc.NewMessageService(msgRepo, chatColl, convMgr, natsPub)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
 	if err != nil {
 		log.Fatalf("media storage: %v", err)
