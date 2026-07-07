@@ -22,7 +22,7 @@ func (a *natsEventAdapter) PublishGroupSystemEvent(ctx context.Context, event gr
 	if a.pub == nil || event.EventType == "" {
 		return nil
 	}
-	subject := "dimgroup." + toSnakeCase(event.EventType)
+	subject := "dim.group." + toSnakeCase(event.EventType)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err

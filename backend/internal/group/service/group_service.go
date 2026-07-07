@@ -81,7 +81,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "GroupCreated",
+		EventType:   EventTypeGroupCreated,
 		OperatorUID: ownerUID,
 		GroupID:     result.ChatID,
 		GroupName:   result.Name,
@@ -90,7 +90,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 	return result, nil
 }
 
-// createGroupInternal 创建群的核心逻辑（不发布事件、不触发头像生成），用于事务内部。
+// createGroupInternal 创建群的核心逻辑，用于事务内部。
 func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	chat, err := s.chatRepo.CreateGroupChat(ctx, ownerUID)
 	if err != nil {
@@ -175,8 +175,17 @@ func (s *GroupService) GenerateGroupAvatarAsync(chatID string) {
 		if avatarURL == "" {
 			return
 		}
-		if _, err := s.groups.UpdateAvatarIfEmpty(ctx, group.ChatID, avatarURL); err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		updated, err := s.groups.UpdateAvatarIfEmpty(ctx, group.ChatID, avatarURL)
+		if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
 			log.Printf("[group] update group avatar failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		if updated != nil {
+			s.publishEvent(ctx, GroupSystemEvent{
+				EventType: EventTypeAvatarUpdated,
+				GroupID:   updated.ChatID,
+				GroupName: updated.Name,
+			})
 		}
 	}()
 }
@@ -409,7 +418,17 @@ func (s *GroupService) UpdateInfo(ctx context.Context, chatID, operatorUID strin
 	if len(fields) == 0 {
 		return s.groups.FindActiveByChatID(ctx, chatID)
 	}
-	return s.groups.UpdateFields(ctx, chatID, fields)
+	result, err := s.groups.UpdateFields(ctx, chatID, fields)
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   EventTypeGroupInfoUpdated,
+		OperatorUID: operatorUID,
+		GroupID:     chatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
 }
 
 func (s *GroupService) UpdateName(ctx context.Context, chatID, operatorUID, name string) (*model.Group, error) {
@@ -430,7 +449,17 @@ func (s *GroupService) UpdateSettings(ctx context.Context, chatID, operatorUID s
 	if settings.JoinMethod == "" {
 		settings.JoinMethod = model.JoinMethodInvite
 	}
-	return s.groups.UpdateFields(ctx, chatID, bson.M{"settings": settings})
+	result, err := s.groups.UpdateFields(ctx, chatID, bson.M{"settings": settings})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   EventTypeGroupInfoUpdated,
+		OperatorUID: operatorUID,
+		GroupID:     chatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
 }
 
 func (s *GroupService) SetAnnouncement(ctx context.Context, chatID, operatorUID, announcement string) (*model.Group, error) {
@@ -441,7 +470,17 @@ func (s *GroupService) SetAnnouncement(ctx context.Context, chatID, operatorUID,
 	if !canUpdateGroupInfo(member) {
 		return nil, ErrForbidden
 	}
-	return s.groups.UpdateFields(ctx, chatID, bson.M{"announcement": strings.TrimSpace(announcement)})
+	result, err := s.groups.UpdateFields(ctx, chatID, bson.M{"announcement": strings.TrimSpace(announcement)})
+	if err != nil {
+		return nil, err
+	}
+	s.publishEvent(ctx, GroupSystemEvent{
+		EventType:   EventTypeAnnouncementUpdated,
+		OperatorUID: operatorUID,
+		GroupID:     chatID,
+		GroupName:   result.Name,
+	})
+	return result, nil
 }
 
 func (s *GroupService) SetMemberRole(ctx context.Context, chatID, operatorUID, targetUID string, role model.MemberRole) (*model.Group, error) {

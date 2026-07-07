@@ -63,7 +63,7 @@ func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*mod
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "MemberJoined",
+		EventType:   EventTypeMemberJoined,
 		OperatorUID: uid,
 		TargetUIDs:  []string{uid},
 		GroupID:     result.ChatID,
@@ -129,7 +129,7 @@ func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID stri
 	}
 	if len(addedUIDs) > 0 {
 		s.publishEvent(ctx, GroupSystemEvent{
-			EventType:   "MembersInvited",
+			EventType:   EventTypeMembersInvited,
 			OperatorUID: operatorUID,
 			TargetUIDs:  addedUIDs,
 			GroupID:     result.ChatID,
@@ -199,7 +199,7 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "MemberLeft",
+		EventType:   EventTypeMemberLeft,
 		OperatorUID: uid,
 		TargetUIDs:  []string{uid},
 		GroupID:     result.ChatID,
@@ -252,7 +252,7 @@ func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, tar
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "MemberKicked",
+		EventType:   EventTypeMemberKicked,
 		OperatorUID: operatorUID,
 		TargetUIDs:  []string{targetUID},
 		GroupID:     result.ChatID,
@@ -322,7 +322,7 @@ func (s *MemberService) SetMemberRole(ctx context.Context, chatID, operatorUID, 
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "MemberRoleChanged",
+		EventType:   EventTypeMemberRoleChanged,
 		OperatorUID: operatorUID,
 		TargetUIDs:  []string{targetUID},
 		GroupID:     result.ChatID,
@@ -347,7 +347,7 @@ func (s *MemberService) TransferOwner(ctx context.Context, chatID, operatorUID, 
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "OwnerTransferred",
+		EventType:   EventTypeOwnerTransferred,
 		OperatorUID: operatorUID,
 		TargetUIDs:  []string{targetUID},
 		GroupID:     result.ChatID,
@@ -400,7 +400,7 @@ func (s *MemberService) DismissGroup(ctx context.Context, chatID, operatorUID st
 		return nil, err
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   "GroupDismissed",
+		EventType:   EventTypeGroupDismissed,
 		OperatorUID: operatorUID,
 		GroupID:     result.ChatID,
 		GroupName:   result.Name,
