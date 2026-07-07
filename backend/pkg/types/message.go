@@ -6,15 +6,16 @@ import "time"
 type MessageType string
 
 const (
-	MessageTypeText     MessageType = "text"
-	MessageTypeImage    MessageType = "image"
-	MessageTypeVideo    MessageType = "video"
-	MessageTypeVoice    MessageType = "voice"
-	MessageTypeCard     MessageType = "card"
-	MessageTypeLink     MessageType = "link"
-	MessageTypeTemplate MessageType = "template"
-	MessageTypeFile     MessageType = "file"
-	MessageTypeLocation MessageType = "location"
+	MessageTypeText        MessageType = "text"
+	MessageTypeSystemEvent MessageType = "system_event"
+	MessageTypeImage       MessageType = "image"
+	MessageTypeVideo       MessageType = "video"
+	MessageTypeVoice       MessageType = "voice"
+	MessageTypeCard        MessageType = "card"
+	MessageTypeLink        MessageType = "link"
+	MessageTypeTemplate    MessageType = "template"
+	MessageTypeFile        MessageType = "file"
+	MessageTypeLocation    MessageType = "location"
 )
 
 // MessageStatus 消息状态

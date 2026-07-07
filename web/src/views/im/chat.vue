@@ -187,14 +187,30 @@
     />
     <Teleport to="body">
       <div v-if="showNewConversationModal" class="new-conversation-modal" @click.self="closeNewConversationModal">
-        <form class="new-conversation-panel" role="dialog" aria-modal="true" aria-label="新建会话" @submit.prevent="createSingleConversation">
+        <form class="new-conversation-panel" role="dialog" aria-modal="true" aria-label="新建会话" @submit.prevent="submitNewConversation">
           <div class="new-conversation-header">
             <h2>新建会话</h2>
             <button class="new-conversation-close" type="button" aria-label="关闭" @click="closeNewConversationModal">
               <i class="ri-close-line"></i>
             </button>
           </div>
-          <label class="new-conversation-field">
+          <div class="new-conversation-tabs" role="tablist" aria-label="新建会话类型">
+            <button
+              type="button"
+              :class="{ 'is-active': newConversationMode === 'single' }"
+              @click="newConversationMode = 'single'"
+            >
+              单聊
+            </button>
+            <button
+              type="button"
+              :class="{ 'is-active': newConversationMode === 'group' }"
+              @click="newConversationMode = 'group'"
+            >
+              群聊
+            </button>
+          </div>
+          <label v-if="newConversationMode === 'single'" class="new-conversation-field">
             <span>用户 ID</span>
             <input
               ref="newConversationInputRef"
@@ -205,13 +221,66 @@
               @keydown.esc="closeNewConversationModal"
             >
           </label>
+          <template v-else>
+            <label class="new-conversation-field">
+              <span>群名称</span>
+              <input
+                ref="newConversationInputRef"
+                v-model="newGroupName"
+                type="text"
+                autocomplete="off"
+                placeholder="输入群名称"
+                @keydown.esc="closeNewConversationModal"
+              >
+            </label>
+            <label class="new-conversation-field">
+              <span>成员用户 ID</span>
+              <textarea
+                v-model="newGroupMemberIdsText"
+                rows="4"
+                placeholder="输入用户 ID，多个 ID 可用逗号、空格或换行分隔"
+                @keydown.esc="closeNewConversationModal"
+              ></textarea>
+            </label>
+          </template>
           <p v-if="newConversationError" class="new-conversation-error">{{ newConversationError }}</p>
           <div class="new-conversation-actions">
             <button class="new-conversation-cancel" type="button" @click="closeNewConversationModal">
               取消
             </button>
-            <button class="new-conversation-submit" type="submit" :disabled="creatingConversation || !newConversationUserId.trim()">
+            <button class="new-conversation-submit" type="submit" :disabled="creatingConversation || !canSubmitNewConversation">
               {{ creatingConversation ? '创建中' : '创建' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="showInviteMembersModal" class="new-conversation-modal" @click.self="closeInviteMembersModal">
+        <form class="new-conversation-panel" role="dialog" aria-modal="true" aria-label="邀请成员" @submit.prevent="inviteMembers">
+          <div class="new-conversation-header">
+            <h2>邀请成员</h2>
+            <button class="new-conversation-close" type="button" aria-label="关闭" @click="closeInviteMembersModal">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+          <label class="new-conversation-field">
+            <span>成员用户 ID</span>
+            <textarea
+              ref="inviteMembersInputRef"
+              v-model="inviteMemberIdsText"
+              rows="4"
+              placeholder="输入用户 ID，多个 ID 可用逗号、空格或换行分隔"
+              @keydown.esc="closeInviteMembersModal"
+            ></textarea>
+          </label>
+          <p v-if="inviteMembersError" class="new-conversation-error">{{ inviteMembersError }}</p>
+          <div class="new-conversation-actions">
+            <button class="new-conversation-cancel" type="button" @click="closeInviteMembersModal">
+              取消
+            </button>
+            <button class="new-conversation-submit" type="submit" :disabled="invitingMembers || parseUserIds(inviteMemberIdsText).length === 0">
+              {{ invitingMembers ? '邀请中' : '邀请' }}
             </button>
           </div>
         </form>
@@ -273,6 +342,7 @@ const {
   ensureConversationInList,
   upsertConversation,
   updateConversationMemberState,
+  updateConversationGroupInfo,
   requestScrollToConversation,
 } = useConversationList()
 const { userMap, fetchUser, mergeUsers } = useUserProfiles()
@@ -284,13 +354,21 @@ const targetUser = ref<UserInfo | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const sidebarMenuRef = ref<HTMLElement | null>(null)
 const newConversationInputRef = ref<HTMLInputElement | null>(null)
+const inviteMembersInputRef = ref<HTMLTextAreaElement | null>(null)
 const showSidebarMenu = ref(false)
 const showConversationSearch = ref(false)
 const showNewConversationModal = ref(false)
+const showInviteMembersModal = ref(false)
 const showConversationInfoDrawer = ref(false)
+const newConversationMode = ref<'single' | 'group'>('single')
 const newConversationUserId = ref('')
+const newGroupName = ref('')
+const newGroupMemberIdsText = ref('')
 const newConversationError = ref('')
 const creatingConversation = ref(false)
+const inviteMemberIdsText = ref('')
+const inviteMembersError = ref('')
+const invitingMembers = ref(false)
 const isMobileViewport = ref(false)
 let cleanupViewportListener: (() => void) | null = null
 const pendingUploadMessageIds = new WeakMap<File, string>()
@@ -360,6 +438,12 @@ const conversationInfoParticipants = computed<UserInfo[]>(() => {
   })
 
   return [...usersById.values()]
+})
+const canSubmitNewConversation = computed(() => {
+  if (newConversationMode.value === 'single') {
+    return Boolean(newConversationUserId.value.trim())
+  }
+  return Boolean(newGroupName.value.trim() && parseUserIds(newGroupMemberIdsText.value).length > 0)
 })
 
 const pageTitle = computed(() => conversationTitle.value || '消息')
@@ -466,8 +550,28 @@ const openNewConversationModal = () => {
 const closeNewConversationModal = () => {
   if (creatingConversation.value) return
   showNewConversationModal.value = false
+  newConversationMode.value = 'single'
   newConversationUserId.value = ''
+  newGroupName.value = ''
+  newGroupMemberIdsText.value = ''
   newConversationError.value = ''
+}
+
+const parseUserIds = (value: string) => Array.from(
+  new Set(
+    value
+      .split(/[\s,，;；]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ),
+)
+
+const submitNewConversation = async () => {
+  if (newConversationMode.value === 'group') {
+    await createGroupConversation()
+    return
+  }
+  await createSingleConversation()
 }
 
 const createSingleConversation = async () => {
@@ -503,13 +607,117 @@ const createSingleConversation = async () => {
   }
 }
 
+const createGroupConversation = async () => {
+  const name = newGroupName.value.trim()
+  const memberIds = parseUserIds(newGroupMemberIdsText.value)
+    .filter((id) => id !== currentUserId.value)
+  if (!name || creatingConversation.value) return
+
+  if (memberIds.length === 0) {
+    newConversationError.value = '至少输入一个成员用户 ID'
+    return
+  }
+
+  const sdk = imStore.imSDK ?? imStore.initSDK()
+  if (!sdk) {
+    newConversationError.value = '请先登录'
+    return
+  }
+
+  creatingConversation.value = true
+  newConversationError.value = ''
+
+  try {
+    const detail = await sdk.createGroup({
+      name,
+      member_user_ids: memberIds,
+    })
+    const nextConversation = detail.conversation
+    if (!nextConversation?.id) {
+      throw new Error('创建群聊失败')
+    }
+    const fullConversation = await sdk.getConversation(nextConversation.id)
+    upsertConversation(fullConversation)
+    showNewConversationModal.value = false
+    newConversationMode.value = 'single'
+    newGroupName.value = ''
+    newGroupMemberIdsText.value = ''
+    await router.replace({ name: 'im-chat', params: { conversationId: fullConversation.id } })
+    requestScrollToConversation(fullConversation.id)
+    showToast('群聊已创建')
+  } catch (error) {
+    console.error('创建群聊失败:', error)
+    newConversationError.value = error instanceof Error ? error.message : '创建群聊失败'
+  } finally {
+    creatingConversation.value = false
+  }
+}
+
 const openConversationInfo = () => {
   showConversationInfoDrawer.value = true
   showSidebarMenu.value = false
 }
 
 const handleInviteMembers = () => {
-  showToast('邀请成员稍后开放')
+  if (!isGroupConversation.value || !conversation.value?.group_id) {
+    showToast('当前会话不支持邀请')
+    return
+  }
+  showConversationInfoDrawer.value = false
+  showInviteMembersModal.value = true
+  inviteMembersError.value = ''
+  nextTick(() => {
+    inviteMembersInputRef.value?.focus()
+  })
+}
+
+const closeInviteMembersModal = () => {
+  if (invitingMembers.value) return
+  showInviteMembersModal.value = false
+  inviteMemberIdsText.value = ''
+  inviteMembersError.value = ''
+}
+
+const inviteMembers = async () => {
+  const groupId = conversation.value?.group_id
+  const conversationIdValue = conversation.value?.id
+  const memberIds = parseUserIds(inviteMemberIdsText.value)
+    .filter((id) => id !== currentUserId.value)
+  if (!groupId || !conversationIdValue || invitingMembers.value) return
+
+  if (memberIds.length === 0) {
+    inviteMembersError.value = '至少输入一个成员用户 ID'
+    return
+  }
+
+  const sdk = imStore.imSDK ?? imStore.initSDK()
+  if (!sdk) {
+    inviteMembersError.value = '请先登录'
+    return
+  }
+
+  invitingMembers.value = true
+  inviteMembersError.value = ''
+
+  try {
+    const detail = await sdk.inviteGroupMembers(groupId, memberIds)
+    if (detail.group) {
+      updateConversationGroupInfo(conversationIdValue, {
+        id: detail.group.id,
+        name: detail.group.name,
+        avatar_url: detail.group.avatar_url,
+        member_count: detail.group.member_count,
+      })
+    }
+    showInviteMembersModal.value = false
+    inviteMemberIdsText.value = ''
+    showToast('邀请已发送')
+  } catch (error) {
+    console.error('邀请成员失败:', error)
+    inviteMembersError.value = error instanceof Error ? error.message : '邀请成员失败'
+  } finally {
+    invitingMembers.value = false
+  }
 }
 
 const handleDocumentPointerDown = (event: PointerEvent) => {
@@ -1357,6 +1565,32 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
+.new-conversation-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 18px 0;
+  padding: 4px;
+  border-radius: 8px;
+  background: #f3f5f9;
+}
+
+.new-conversation-tabs button {
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-color-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.new-conversation-tabs button.is-active {
+  background: white;
+  color: var(--text-color-dark);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
 .new-conversation-close {
   width: 32px;
   height: 32px;
@@ -1394,10 +1628,9 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
-.new-conversation-field input {
+.new-conversation-field input,
+.new-conversation-field textarea {
   width: 100%;
-  height: 40px;
-  padding: 0 12px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   outline: none;
@@ -1408,7 +1641,19 @@ onUnmounted(() => {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.new-conversation-field input:focus {
+.new-conversation-field input {
+  height: 40px;
+  padding: 0 12px;
+}
+
+.new-conversation-field textarea {
+  min-height: 92px;
+  resize: vertical;
+  padding: 10px 12px;
+}
+
+.new-conversation-field input:focus,
+.new-conversation-field textarea:focus {
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
 }

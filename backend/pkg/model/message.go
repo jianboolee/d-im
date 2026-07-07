@@ -77,6 +77,8 @@ func NormalizeMessageContent(msgType types.MessageType, content interface{}) int
 	switch msgType {
 	case types.MessageTypeText:
 		return decodeMessageContent[types.TextContent](content)
+	case types.MessageTypeSystemEvent:
+		return decodeMessageContent[types.SystemEventContent](content)
 	case types.MessageTypeImage:
 		return decodeMessageContent[types.ImageContent](content)
 	case types.MessageTypeVideo:

@@ -12,6 +12,13 @@ func TestBuildContentPreviewForTextMessage(t *testing.T) {
 	}
 }
 
+func TestBuildContentPreviewForSystemEvent(t *testing.T) {
+	preview := BuildContentPreview(MessageTypeSystemEvent, SystemEventContent{Text: "Alice邀请Bob加入群聊"})
+	if preview != "Alice邀请Bob加入群聊" {
+		t.Fatalf("expected system event text, got %q", preview)
+	}
+}
+
 func TestBuildContentPreviewTruncatesRunes(t *testing.T) {
 	preview := BuildContentPreview(MessageTypeText, TextContent{Text: strings.Repeat("你", 51)})
 	if len([]rune(preview)) != 53 {

@@ -130,7 +130,11 @@ func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerU
 
 // AddMember 添加群成员
 func (m *ChatIDManager) AddMember(ctx context.Context, chatID string, uid string) error {
-	filter := bson.M{"chat_id": chatID}
+	filter := bson.M{
+		"chat_id":   chatID,
+		"chat_type": types.ChatTypeGroup,
+		"members":   bson.M{"$ne": uid},
+	}
 	update := bson.M{
 		"$addToSet": bson.M{"members": uid},
 		"$inc":      bson.M{"member_count": 1},
@@ -142,7 +146,11 @@ func (m *ChatIDManager) AddMember(ctx context.Context, chatID string, uid string
 
 // RemoveMember 移除群成员
 func (m *ChatIDManager) RemoveMember(ctx context.Context, chatID string, uid string) error {
-	filter := bson.M{"chat_id": chatID}
+	filter := bson.M{
+		"chat_id":   chatID,
+		"chat_type": types.ChatTypeGroup,
+		"members":   uid,
+	}
 	update := bson.M{
 		"$pull": bson.M{"members": uid},
 		"$inc":  bson.M{"member_count": -1},
@@ -150,6 +158,27 @@ func (m *ChatIDManager) RemoveMember(ctx context.Context, chatID string, uid str
 	}
 	_, err := m.chatColl.UpdateOne(ctx, filter, update)
 	return err
+}
+
+// UpdateGroupName 修改群名称。
+func (m *ChatIDManager) UpdateGroupName(ctx context.Context, chatID string, name string) (*Chat, error) {
+	update := bson.M{
+		"$set": bson.M{
+			"name":       name,
+			"updated_at": time.Now(),
+		},
+	}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+	var chat Chat
+	err := m.chatColl.FindOneAndUpdate(ctx, bson.M{
+		"chat_id":   chatID,
+		"chat_type": types.ChatTypeGroup,
+	}, update, opts).Decode(&chat)
+	if err != nil {
+		return nil, err
+	}
+	return &chat, nil
 }
 
 // GetMembers 查询群成员列表

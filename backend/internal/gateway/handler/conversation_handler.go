@@ -234,6 +234,8 @@ type conversationDTO struct {
 	Participants     []string           `json:"participants"`
 	PeerUser         *userDTO           `json:"peer_user"`
 	Group            interface{}        `json:"group"`
+	GroupID          string             `json:"group_id,omitempty"`
+	GroupInfo        *groupSummaryDTO   `json:"group_info,omitempty"`
 	LastMessage      *types.LastMessage `json:"last_message"`
 	LastReadSequence int64              `json:"last_read_sequence"`
 	LastReadAt       string             `json:"last_read_at,omitempty"`
@@ -247,8 +249,10 @@ type conversationDTO struct {
 func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.Conversation, currentUserID string) conversationDTO {
 	participants := []string{}
 	var peer *userDTO
+	var groupInfo *groupSummaryDTO
 	title := conv.CustomName
 	avatar := ""
+	groupID := ""
 
 	if h.chats != nil {
 		if chat, err := h.chats.FindByChatID(ctx, conv.ChatID); err == nil {
@@ -257,6 +261,15 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 				title = chat.Name
 			}
 			avatar = chat.Avatar
+			if conv.ChatType == types.ChatTypeGroup {
+				groupID = chat.ChatID
+				groupInfo = &groupSummaryDTO{
+					ID:          chat.ChatID,
+					Name:        chat.Name,
+					AvatarURL:   chat.Avatar,
+					MemberCount: chat.MemberCount,
+				}
+			}
 		}
 	}
 
@@ -286,7 +299,9 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 		Avatar:           avatar,
 		Participants:     participants,
 		PeerUser:         peer,
-		Group:            nil,
+		Group:            groupInfo,
+		GroupID:          groupID,
+		GroupInfo:        groupInfo,
 		LastMessage:      conv.LastMsg,
 		LastReadSequence: conv.LastReadSeq,
 		LastReadAt:       formatOptionalTime(conv.LastReadAt, time.Time{}),
@@ -298,6 +313,13 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 	}
 
 	return dto
+}
+
+type groupSummaryDTO struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	AvatarURL   string `json:"avatar_url,omitempty"`
+	MemberCount int    `json:"member_count"`
 }
 
 func findPeerID(participants []string, currentUserID string) string {

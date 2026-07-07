@@ -60,6 +60,9 @@ func (m *ConversationManager) CreateOrUpdate(ctx context.Context, conv *Conversa
 		"$set": bson.M{
 			"updated_at": now,
 		},
+		"$unset": bson.M{
+			"left_at": "",
+		},
 	}
 
 	opts := options.Update().SetUpsert(true)
@@ -93,6 +96,9 @@ func (m *ConversationManager) BatchCreate(ctx context.Context, uidList []string,
 			},
 			"$set": bson.M{
 				"updated_at": now,
+			},
+			"$unset": bson.M{
+				"left_at": "",
 			},
 		}
 
@@ -288,6 +294,24 @@ func (m *ConversationManager) MarkRead(ctx context.Context, uid, chatID string, 
 			"last_read_seq": lastReadSeq,
 			"last_read_at":  now,
 			"updated_at":    now,
+		},
+	}
+	_, err := m.convColl.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// MarkLeft 标记当前用户离开会话，使其不再出现在会话列表中。
+func (m *ConversationManager) MarkLeft(ctx context.Context, uid, chatID string) error {
+	now := time.Now()
+	filter := bson.M{
+		"uid":     uid,
+		"chat_id": chatID,
+		"left_at": bson.M{"$exists": false},
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"left_at":    now,
+			"updated_at": now,
 		},
 	}
 	_, err := m.convColl.UpdateOne(ctx, filter, update)

@@ -62,6 +62,10 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, 400010, "message_type is required")
 		return
 	}
+	if raw.MessageType == types.MessageTypeSystemEvent {
+		writeAPIError(w, http.StatusForbidden, 403001, "system_event cannot be sent by clients")
+		return
+	}
 
 	conv, err := h.convSvc.GetConversation(r.Context(), uid, raw.ConversationID)
 	if err != nil {
@@ -359,6 +363,12 @@ func parseContent(msgType types.MessageType, raw json.RawMessage) (types.Content
 	switch msgType {
 	case types.MessageTypeText:
 		var c types.TextContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		content = c
+	case types.MessageTypeSystemEvent:
+		var c types.SystemEventContent
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return nil, err
 		}

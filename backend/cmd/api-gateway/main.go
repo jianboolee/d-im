@@ -14,6 +14,7 @@ import (
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
+	groupSvc "d-im/internal/group/service"
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
 	userRepo "d-im/internal/user/repository"
@@ -86,9 +87,11 @@ func main() {
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatMgr, uRepo)
+	groupService := groupSvc.NewGroupService(chatMgr, convMgr)
+	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
 	userHandler := handler.NewUserHandler(uRepo)
 	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, userHandler, sdkHandler)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, userHandler, sdkHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

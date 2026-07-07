@@ -14,6 +14,7 @@ func NewRouter(
 	authHandler *handler.AuthHandler,
 	messageHandler *handler.MessageHandler,
 	convHandler *handler.ConversationHandler,
+	groupHandler *handler.GroupHandler,
 	userHandler *handler.UserHandler,
 	sdkHandler *handler.SDKHandler,
 ) http.Handler {
@@ -48,6 +49,12 @@ func NewRouter(
 	protected.HandleFunc("PATCH /api/v1/conversations/{id}/settings", convHandler.UpdateConversationSettings)
 	protected.HandleFunc("GET /api/v1/conversations/{id}/messages", messageHandler.ListConversationMessages)
 	protected.HandleFunc("GET /api/v1/conversations/{id}/messages/search", messageHandler.SearchConversationMessages)
+	protected.HandleFunc("POST /api/v1/groups", groupHandler.CreateGroup)
+	protected.HandleFunc("GET /api/v1/groups/{id}", groupHandler.GetGroup)
+	protected.HandleFunc("PATCH /api/v1/groups/{id}", groupHandler.UpdateGroup)
+	protected.HandleFunc("GET /api/v1/groups/{id}/members", groupHandler.ListMembers)
+	protected.HandleFunc("POST /api/v1/groups/{id}/members", groupHandler.InviteMembers)
+	protected.HandleFunc("POST /api/v1/groups/{id}/leave", groupHandler.LeaveGroup)
 	protected.HandleFunc("GET /api/v1/users/me", userHandler.GetMe)
 	protected.HandleFunc("GET /api/v1/users/{id}", userHandler.GetUser)
 
@@ -61,6 +68,8 @@ func NewRouter(
 	mux.Handle("/api/v1/messages", protectedHandler)
 	mux.Handle("/api/v1/conversations", protectedHandler)
 	mux.Handle("/api/v1/conversations/", protectedHandler)
+	mux.Handle("/api/v1/groups", protectedHandler)
+	mux.Handle("/api/v1/groups/", protectedHandler)
 	mux.Handle("/api/v1/users/", protectedHandler)
 
 	return mux

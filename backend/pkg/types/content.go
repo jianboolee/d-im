@@ -29,6 +29,35 @@ func (t TextContent) Validate() error {
 }
 
 // ============================================================
+// 系统事件消息
+// ============================================================
+
+// SystemEventContent 系统事件消息，用于群创建、邀请、退群、改名等状态变更。
+type SystemEventContent struct {
+	EventType     string   `bson:"event_type" json:"event_type"`
+	Text          string   `bson:"text" json:"text"`
+	Title         string   `bson:"title,omitempty" json:"title,omitempty"`
+	OperatorID    string   `bson:"operator_id,omitempty" json:"operator_id,omitempty"`
+	TargetUserIDs []string `bson:"target_user_ids,omitempty" json:"target_user_ids,omitempty"`
+	GroupID       string   `bson:"group_id,omitempty" json:"group_id,omitempty"`
+	GroupName     string   `bson:"group_name,omitempty" json:"group_name,omitempty"`
+	BeforeValue   string   `bson:"before_value,omitempty" json:"before_value,omitempty"`
+	AfterValue    string   `bson:"after_value,omitempty" json:"after_value,omitempty"`
+}
+
+func (s SystemEventContent) Type() MessageType { return MessageTypeSystemEvent }
+
+func (s SystemEventContent) Validate() error {
+	if s.EventType == "" {
+		return fmt.Errorf("system event type cannot be empty")
+	}
+	if s.Text == "" {
+		return fmt.Errorf("system event text cannot be empty")
+	}
+	return nil
+}
+
+// ============================================================
 // 图片消息
 // ============================================================
 

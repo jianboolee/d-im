@@ -137,6 +137,12 @@ export enum MessageType {
   export interface GroupDetailResponse {
     group: Group;
     members?: GroupMember[];
+    conversation?: Conversation;
+  }
+
+  export interface GroupCreateRequest {
+    name: string;
+    member_user_ids: string[];
   }
 
   export interface GroupUpdatePatch {
@@ -334,6 +340,8 @@ export enum MessageType {
       last_message: lastMessage ?? conv.last_message,
       display_name: raw.title == null ? conv.display_name : String(raw.title),
       display_avatar: raw.avatar == null ? conv.display_avatar : String(raw.avatar),
+      group_id: raw.group_id == null ? conv.group_id : String(raw.group_id),
+      group_info: ((raw.group_info ?? raw.group) as GroupSummary | undefined) ?? conv.group_info,
       peer_user_info: (raw.peer_user as UserInfo | null | undefined) ?? conv.peer_user_info,
       last_read_sequence: Number(raw.last_read_sequence ?? conv.last_read_sequence ?? 0),
       last_read_at: raw.last_read_at == null ? conv.last_read_at : String(raw.last_read_at),
@@ -714,10 +722,26 @@ export enum MessageType {
       return normalizeConversation(data);
     }
 
+    async createGroup(req: GroupCreateRequest): Promise<GroupDetailResponse> {
+      const detail = await apiRequest<GroupDetailResponse>(
+        this.baseURL,
+        '/api/v1/groups',
+        this.token,
+        {
+          method: 'POST',
+          body: JSON.stringify(req),
+        },
+      );
+      if (detail.conversation) {
+        detail.conversation = normalizeConversation(detail.conversation as unknown as Record<string, unknown>);
+      }
+      return detail;
+    }
+
     async getGroup(groupId: string): Promise<GroupDetailResponse> {
       return apiRequest<GroupDetailResponse>(
         this.baseURL,
-        `/im/api/groups/${groupId}`,
+        `/api/v1/groups/${groupId}`,
         this.token,
       );
     }
@@ -725,7 +749,7 @@ export enum MessageType {
     async updateGroup(groupId: string, patch: GroupUpdatePatch): Promise<GroupDetailResponse> {
       return apiRequest<GroupDetailResponse>(
         this.baseURL,
-        `/im/api/groups/${groupId}`,
+        `/api/v1/groups/${groupId}`,
         this.token,
         {
           method: 'PATCH',
@@ -744,15 +768,27 @@ export enum MessageType {
       const suffix = queryParams.toString() ? `?${queryParams}` : '';
       return apiRequest<GroupMemberPage>(
         this.baseURL,
-        `/im/api/groups/${groupId}/members${suffix}`,
+        `/api/v1/groups/${groupId}/members${suffix}`,
         this.token,
+      );
+    }
+
+    async inviteGroupMembers(groupId: string, memberUserIds: string[]): Promise<GroupDetailResponse> {
+      return apiRequest<GroupDetailResponse>(
+        this.baseURL,
+        `/api/v1/groups/${groupId}/members`,
+        this.token,
+        {
+          method: 'POST',
+          body: JSON.stringify({ member_user_ids: memberUserIds }),
+        },
       );
     }
 
     async leaveGroup(groupId: string): Promise<void> {
       await apiRequest<void>(
         this.baseURL,
-        `/im/api/groups/${groupId}/leave`,
+        `/api/v1/groups/${groupId}/leave`,
         this.token,
         { method: 'POST' },
       );

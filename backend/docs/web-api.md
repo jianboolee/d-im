@@ -1465,21 +1465,222 @@ Connector 推送消息：
 
 ### 13. 群聊能力
 
-目标：在单聊稳定后再做群聊。
+目标：复用现有会话、消息、已读链路，把群聊补成可独立验收的最小闭环。群 ID 使用底层 `chat_id`，对 web 暴露为 `group_id`；群会话仍使用 `conversation_id` 发送消息。
 
-建议顺序：
+已落地顺序：
 
-1. 创建群。
-2. 群详情。
-3. 群成员列表。
-4. 群文本消息。
-5. 群消息未读和已读。
-6. 邀请成员。
-7. 退群。
-8. 改群名。
-9. 群系统事件。
+1. 创建群：`POST /api/v1/groups`。
+2. 群详情：`GET /api/v1/groups/{group_id}`。
+3. 群成员列表：`GET /api/v1/groups/{group_id}/members`。
+4. 群文本消息：复用 `POST /api/v1/messages`，`conversation_id` 传群会话 ID。
+5. 群消息未读和已读：复用会话列表和 `POST /api/v1/conversations/{conversation_id}/read`。
+6. 邀请成员：`POST /api/v1/groups/{group_id}/members`。
+7. 退群：`POST /api/v1/groups/{group_id}/leave`。
+8. 改群名：`PATCH /api/v1/groups/{group_id}`。
+9. 群系统事件：群操作自动写入 `system_event` 消息。
 
-每个事项独立验收，不和单聊主链路混在一起。
+#### 创建群
+
+```http
+POST /api/v1/groups
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "name": "项目群",
+  "member_user_ids": ["u_002", "u_003"]
+}
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "group": {
+      "id": "chat_100",
+      "conversation_id": "conv_100",
+      "name": "项目群",
+      "avatar_url": "",
+      "owner_id": "u_001",
+      "member_count": 3,
+      "status": "active",
+      "created_at": "2026-07-05T12:00:00Z",
+      "updated_at": "2026-07-05T12:00:00Z"
+    },
+    "conversation": {
+      "id": "conv_100",
+      "conversation_id": "conv_100",
+      "chat_id": "chat_100",
+      "chat_type": "group"
+    }
+  },
+  "error": ""
+}
+```
+
+#### 群详情
+
+```http
+GET /api/v1/groups/{group_id}
+Authorization: Bearer <access_token>
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "group": {
+      "id": "chat_100",
+      "conversation_id": "conv_100",
+      "name": "项目群",
+      "owner_id": "u_001",
+      "member_count": 3,
+      "status": "active",
+      "created_at": "2026-07-05T12:00:00Z",
+      "updated_at": "2026-07-05T12:00:00Z"
+    },
+    "members": [
+      {
+        "id": "chat_100:u_001",
+        "group_id": "chat_100",
+        "user_id": "u_001",
+        "role": "owner",
+        "status": "active",
+        "joined_at": "2026-07-05T12:00:00Z",
+        "invited_by": "u_001",
+        "user_info": {
+          "id": "u_001",
+          "nickname": "Alice",
+          "avatar": "",
+          "status": "active"
+        }
+      }
+    ]
+  },
+  "error": ""
+}
+```
+
+#### 群成员列表
+
+```http
+GET /api/v1/groups/{group_id}/members?limit=20&cursor=
+Authorization: Bearer <access_token>
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [],
+    "next_cursor": "",
+    "has_more": false
+  },
+  "error": ""
+}
+```
+
+#### 邀请成员
+
+```http
+POST /api/v1/groups/{group_id}/members
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "member_user_ids": ["u_004"]
+}
+```
+
+响应返回更新后的 `group`。
+
+#### 修改群名
+
+```http
+PATCH /api/v1/groups/{group_id}
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+请求：
+
+```json
+{
+  "name": "新项目群"
+}
+```
+
+响应返回更新后的 `group`。
+
+#### 退出群聊
+
+```http
+POST /api/v1/groups/{group_id}/leave
+Authorization: Bearer <access_token>
+```
+
+响应：
+
+```json
+{
+  "code": 0,
+  "data": {},
+  "error": ""
+}
+```
+
+验收：
+
+- 创建群后，创建者和被邀请成员都有 `chat_type=group` 的会话视图。
+- 会话列表中的群会话带 `group_id`、`group_info`，`title` 使用群名。
+- 群成员可以通过群会话 `conversation_id` 发送文本消息，消息写入所有当前成员 mailbox。
+- 群已读使用当前会话已读接口，`last_read_sequence` 不倒退。
+- 退群后当前用户会话设置 `left_at`，不再出现在会话列表，后续群消息不再投递给该用户。
+- 修改群名后再次读取会话列表或群详情能看到新群名。
+- 创建群、邀请成员、退群、修改群名会自动生成 `system_event` 消息；客户端不能通过 `POST /api/v1/messages` 直接发送 `system_event`。
+
+#### 群系统事件
+
+系统事件由群接口自动写入，不提供客户端直接发送入口。事件消息复用普通消息结构：
+
+```json
+{
+  "message_type": "system_event",
+  "content_preview": "Alice邀请Bob加入群聊",
+  "content": {
+    "event_type": "members_invited",
+    "text": "Alice邀请Bob加入群聊",
+    "title": "Alice邀请Bob加入群聊",
+    "operator_id": "u_001",
+    "target_user_ids": ["u_002"],
+    "group_id": "chat_100",
+    "group_name": "项目群",
+    "before_value": "",
+    "after_value": ""
+  }
+}
+```
+
+当前事件类型：
+
+1. `group_created`：创建群。
+2. `members_invited`：邀请成员。
+3. `member_left`：成员退群。
+4. `group_name_updated`：修改群名，`before_value` 为旧群名，`after_value` 为新群名。
 
 ### 14. 会话增强能力
 

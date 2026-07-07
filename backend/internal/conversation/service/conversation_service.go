@@ -35,6 +35,11 @@ func (s *ConversationService) GetConversation(ctx context.Context, uid, conversa
 	return s.convMgr.FindByUIDAndConversationID(ctx, uid, conversationID)
 }
 
+// GetConversationByChatID 获取当前用户在指定 chat 下的会话视图。
+func (s *ConversationService) GetConversationByChatID(ctx context.Context, uid, chatID string) (*model.Conversation, error) {
+	return s.convMgr.FindByUIDAndChatID(ctx, uid, chatID)
+}
+
 // CreateOrGetSingle 创建或获取单聊会话，并确保双方会话视图存在
 func (s *ConversationService) CreateOrGetSingle(ctx context.Context, uid, peerUserID string) (*model.Conversation, error) {
 	chat, err := s.chatMgr.CreateOrGetSingleChat(ctx, uid, peerUserID)

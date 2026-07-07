@@ -2,8 +2,13 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"d-im/pkg/model"
+	"d-im/pkg/types"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // GroupService 群组服务
@@ -22,6 +27,10 @@ func NewGroupService(chatMgr *model.ChatIDManager, convMgr *model.ConversationMa
 
 // CreateGroup 创建群聊
 func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Chat, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("group name is required")
+	}
 	chat, err := s.chatMgr.CreateGroupChat(ctx, name, ownerUID, memberUIDs)
 	if err != nil {
 		return nil, err
@@ -32,6 +41,21 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		return nil, err
 	}
 
+	return chat, nil
+}
+
+// GetGroupForMember 查询群，并校验当前用户仍在群内。
+func (s *GroupService) GetGroupForMember(ctx context.Context, chatID, uid string) (*model.Chat, error) {
+	chat, err := s.chatMgr.FindByChatID(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if chat.ChatType != types.ChatTypeGroup {
+		return nil, mongo.ErrNoDocuments
+	}
+	if !containsString(chat.Members, uid) {
+		return nil, mongo.ErrNoDocuments
+	}
 	return chat, nil
 }
 
@@ -55,12 +79,64 @@ func (s *GroupService) AddMember(ctx context.Context, chatID, uid string) error 
 	return s.convMgr.CreateOrUpdate(ctx, conv)
 }
 
+// AddMembers 批量邀请群成员。
+func (s *GroupService) AddMembers(ctx context.Context, chatID string, uidList []string) (*model.Chat, error) {
+	chat, err := s.chatMgr.FindByChatID(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if chat.ChatType != types.ChatTypeGroup {
+		return nil, mongo.ErrNoDocuments
+	}
+	for _, uid := range uniqueNonEmpty(uidList) {
+		if err := s.AddMember(ctx, chatID, uid); err != nil {
+			return nil, err
+		}
+	}
+	return s.chatMgr.FindByChatID(ctx, chatID)
+}
+
 // RemoveMember 移除群成员
 func (s *GroupService) RemoveMember(ctx context.Context, chatID, uid string) error {
-	return s.chatMgr.RemoveMember(ctx, chatID, uid)
+	if err := s.chatMgr.RemoveMember(ctx, chatID, uid); err != nil {
+		return err
+	}
+	return s.convMgr.MarkLeft(ctx, uid, chatID)
 }
 
 // GetMembers 获取群成员列表
 func (s *GroupService) GetMembers(ctx context.Context, chatID string) ([]string, error) {
 	return s.chatMgr.GetMembers(ctx, chatID)
+}
+
+// UpdateName 修改群名称。
+func (s *GroupService) UpdateName(ctx context.Context, chatID, name string) (*model.Chat, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("group name is required")
+	}
+	return s.chatMgr.UpdateGroupName(ctx, chatID, name)
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func uniqueNonEmpty(items []string) []string {
+	seen := make(map[string]bool, len(items))
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		result = append(result, item)
+	}
+	return result
 }

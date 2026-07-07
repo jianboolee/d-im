@@ -4,6 +4,8 @@ func BuildContentPreview(msgType MessageType, content interface{}) string {
 	switch c := content.(type) {
 	case TextContent:
 		return truncatePreview(c.Text, 50)
+	case SystemEventContent:
+		return truncatePreview(c.Text, 50)
 	case ImageContent:
 		return "[图片]"
 	case VideoContent:
@@ -39,6 +41,13 @@ func previewFromMap(msgType MessageType, content map[string]interface{}) string 
 		if text, ok := content["text"].(string); ok {
 			return truncatePreview(text, 50)
 		}
+	case MessageTypeSystemEvent:
+		if text, ok := content["text"].(string); ok {
+			return truncatePreview(text, 50)
+		}
+		if title, ok := content["title"].(string); ok {
+			return truncatePreview(title, 50)
+		}
 	case MessageTypeFile:
 		if fileName, ok := content["file_name"].(string); ok {
 			return "[文件] " + fileName
@@ -61,6 +70,8 @@ func previewFromMap(msgType MessageType, content map[string]interface{}) string 
 
 func previewByType(msgType MessageType) string {
 	switch msgType {
+	case MessageTypeSystemEvent:
+		return "[系统消息]"
 	case MessageTypeImage:
 		return "[图片]"
 	case MessageTypeVideo:
