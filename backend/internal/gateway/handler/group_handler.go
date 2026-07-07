@@ -19,28 +19,11 @@ import (
 
 // GroupHandler 群聊 HTTP 处理器。
 type GroupHandler struct {
-	groups  groupOperator
+	groups  *groupSvc.GroupService
+	members *groupSvc.MemberService
 	convSvc conversationByChatReader
 	msgSvc  groupMessageSender
 	users   userReader
-}
-
-type groupOperator interface {
-	CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error)
-	ListGroupsForMember(ctx context.Context, uid string, limit, offset int64) ([]*model.Group, error)
-	GetGroupForMember(ctx context.Context, chatID, uid string) (*model.Group, error)
-	JoinGroup(ctx context.Context, chatID, uid string) (*model.Group, error)
-	AddMembers(ctx context.Context, chatID, operatorUID string, uidList []string) (*model.Group, []string, error)
-	LeaveGroup(ctx context.Context, chatID, uid string) (*model.Group, error)
-	KickMember(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error)
-	UpdateInfo(ctx context.Context, chatID, operatorUID string, info groupSvc.UpdateGroupInfo) (*model.Group, error)
-	UpdateName(ctx context.Context, chatID, operatorUID, name string) (*model.Group, error)
-	UpdateSettings(ctx context.Context, chatID, operatorUID string, settings model.GroupSettings) (*model.Group, error)
-	SetAnnouncement(ctx context.Context, chatID, operatorUID, announcement string) (*model.Group, error)
-	SetMemberRole(ctx context.Context, chatID, operatorUID, targetUID string, role model.MemberRole) (*model.Group, error)
-	TransferOwner(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error)
-	DismissGroup(ctx context.Context, chatID, operatorUID string) (*model.Group, error)
-	ListMembers(ctx context.Context, chatID string, limit, offset int64) ([]*model.GroupMember, error)
 }
 
 type conversationByChatReader interface {
@@ -52,8 +35,8 @@ type groupMessageSender interface {
 }
 
 // NewGroupHandler 创建群聊处理器。
-func NewGroupHandler(groups groupOperator, convSvc conversationByChatReader, msgSvc groupMessageSender, users userReader) *GroupHandler {
-	return &GroupHandler{groups: groups, convSvc: convSvc, msgSvc: msgSvc, users: users}
+func NewGroupHandler(groups *groupSvc.GroupService, members *groupSvc.MemberService, convSvc conversationByChatReader, msgSvc groupMessageSender, users userReader) *GroupHandler {
+	return &GroupHandler{groups: groups, members: members, convSvc: convSvc, msgSvc: msgSvc, users: users}
 }
 
 // ListGroups 获取当前用户加入的群列表。

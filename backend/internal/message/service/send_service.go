@@ -14,6 +14,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// ErrChatRepoRequired chat repository is required.
+var ErrChatRepoRequired = fmt.Errorf("chat repository is required")
+
 // SendMessageReq 发送消息请求
 type SendMessageReq struct {
 	ChatID      string            `json:"chat_id"`
@@ -98,15 +101,15 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 			return nil, fmt.Errorf("find existing message: %w", err)
 		}
 	}
-	if s.chatColl == nil {
-		return nil, fmt.Errorf("chat collection is required")
+	if s.chatRepo == nil {
+		return nil, ErrChatRepoRequired
 	}
 	if err := s.checkSendPermission(ctx, req); err != nil {
 		return nil, err
 	}
 
 	msgID := s.GenerateMsgID()
-	msgSeq, err := model.NextChatMessageSeq(ctx, s.chatColl, req.ChatID)
+	msgSeq, err := s.chatRepo.NextMessageSeq(ctx, req.ChatID)
 	if err != nil {
 		return nil, fmt.Errorf("next message seq: %w", err)
 	}
@@ -126,8 +129,8 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 			if err != nil {
 				return nil, fmt.Errorf("get group members: %w", err)
 			}
-		} else if s.chatColl != nil {
-			members, err = model.GetChatMembers(ctx, s.chatColl, req.ChatID)
+		} else if s.chatRepo != nil {
+			members, err = s.chatRepo.GetMembers(ctx, req.ChatID)
 			if err != nil {
 				return nil, fmt.Errorf("get chat members: %w", err)
 			}
@@ -213,7 +216,7 @@ func (s *MessageService) checkSendPermission(ctx context.Context, req *SendMessa
 	if req == nil || req.ChatID == "" {
 		return nil
 	}
-	chat, err := model.FindChatByID(ctx, s.chatColl, req.ChatID)
+	chat, err := s.chatRepo.FindByChatID(ctx, req.ChatID)
 	if err != nil {
 		return err
 	}

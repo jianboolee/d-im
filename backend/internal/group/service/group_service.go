@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/types"
@@ -16,22 +17,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var (
-	ErrForbidden = errors.New("forbidden")
-	ErrInvalid   = errors.New("invalid group operation")
-	ErrGroupFull = errors.New("group is full")
-)
-
 const defaultMaxMembers = 500
 
-type UpdateGroupInfo struct {
-	Name        *string
-	Avatar      *string
-	Description *string
-}
-
 type GroupService struct {
-	chatColl        *mongo.Collection
+	chatRepo        *chatRepo.ChatRepo
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
 	convMgr         *model.ConversationManager
@@ -42,9 +31,9 @@ type groupAvatarGenerator interface {
 	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
 }
 
-func NewGroupService(chatColl *mongo.Collection, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
+func NewGroupService(chatRepo *chatRepo.ChatRepo, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
 	return &GroupService{
-		chatColl: chatColl,
+		chatRepo: chatRepo,
 		groups:   groupRepo,
 		members:  memberRepo,
 		convMgr:  convMgr,
@@ -64,7 +53,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 		return nil, ErrInvalid
 	}
 
-	chat, err := model.CreateGroupChat(ctx, s.chatColl, ownerUID)
+	chat, err := s.chatRepo.CreateGroupChat(ctx, ownerUID)
 	if err != nil {
 		return nil, err
 	}

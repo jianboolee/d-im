@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	chatRepo "d-im/internal/chat/repository"
 	convSvc "d-im/internal/conversation/service"
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
@@ -75,11 +76,12 @@ func main() {
 
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db)
-	chatColl := model.ChatCollection(db)
+	chatR := chatRepo.NewChatRepo(db)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
-	groupService := groupSvc.NewGroupService(chatColl, gRepo, mRepo, convMgr)
-	msgSvc := messageSvc.NewMessageService(msgRepo, chatColl, convMgr, natsPub)
+	groupService := groupSvc.NewGroupService(chatR, gRepo, mRepo, convMgr)
+	memberService := groupSvc.NewMemberService(chatR, gRepo, mRepo, convMgr)
+	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convMgr, natsPub)
 	msgSvc.SetGroupReader(groupService)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
 	if err != nil {
@@ -87,13 +89,13 @@ func main() {
 	}
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
-	conversationSvc := convSvc.NewConversationService(convMgr, chatColl)
+	conversationSvc := convSvc.NewConversationService(convMgr, chatR)
 	uRepo := userRepo.NewUserRepo(db)
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
-	convHandler := handler.NewConversationHandler(conversationSvc, chatColl, groupService, uRepo)
+	convHandler := handler.NewConversationHandler(conversationSvc, chatR, groupService, uRepo)
 	groupService.SetAvatarGenerator(groupAvatar.NewGenerator(store, uRepo))
-	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
+	groupHandler := handler.NewGroupHandler(groupService, memberService, conversationSvc, msgSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)
 	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)

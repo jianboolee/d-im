@@ -8,11 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/message/dispatcher"
 	"d-im/internal/message/repository"
 	"d-im/internal/message/service"
 	"d-im/pkg/config"
-	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
 )
 
@@ -40,9 +40,9 @@ func main() {
 	}
 
 	// 3. 初始化
-	chatColl := model.ChatCollection(db)
+	chatR := chatRepo.NewChatRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
-	msgSvc := service.NewMessageService(msgRepo, chatColl, nil, nil)
+	msgSvc := service.NewMessageService(msgRepo, chatR, nil, nil)
 
 	// 4. 启动分发器
 	d := dispatcher.NewDispatcher(msgRepo, 4)

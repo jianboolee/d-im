@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/pkg/model"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,12 +13,12 @@ import (
 // ConversationService 会话服务
 type ConversationService struct {
 	convMgr  *model.ConversationManager
-	chatColl *mongo.Collection
+	chatRepo *chatRepo.ChatRepo
 }
 
 // NewConversationService 创建会话服务
-func NewConversationService(convMgr *model.ConversationManager, chatColl *mongo.Collection) *ConversationService {
-	return &ConversationService{convMgr: convMgr, chatColl: chatColl}
+func NewConversationService(convMgr *model.ConversationManager, chatRepo *chatRepo.ChatRepo) *ConversationService {
+	return &ConversationService{convMgr: convMgr, chatRepo: chatRepo}
 }
 
 // GetList 获取用户会话列表
@@ -42,7 +43,7 @@ func (s *ConversationService) GetConversationByChatID(ctx context.Context, uid, 
 
 // CreateOrGetSingle 创建或获取单聊会话，并确保双方会话视图存在
 func (s *ConversationService) CreateOrGetSingle(ctx context.Context, uid, peerUserID string) (*model.Conversation, error) {
-	chat, err := model.CreateOrGetSingleChat(ctx, s.chatColl, uid, peerUserID)
+	chat, err := s.chatRepo.CreateOrGetSingleChat(ctx, uid, peerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -110,10 +111,10 @@ func (s *ConversationService) ReadConversation(ctx context.Context, uid, convers
 		return nil, err
 	}
 	if lastReadSeq <= 0 {
-		if s.chatColl == nil {
-			return nil, fmt.Errorf("chat collection is required")
+		if s.chatRepo == nil {
+			return nil, fmt.Errorf("chat repository is required")
 		}
-		chat, err := model.FindChatByID(ctx, s.chatColl, conv.ChatID)
+		chat, err := s.chatRepo.FindByChatID(ctx, conv.ChatID)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				return nil, err
@@ -121,8 +122,8 @@ func (s *ConversationService) ReadConversation(ctx context.Context, uid, convers
 			return nil, fmt.Errorf("find chat: %w", err)
 		}
 		lastReadSeq = chat.LastSeq
-	} else if s.chatColl != nil {
-		chat, err := model.FindChatByID(ctx, s.chatColl, conv.ChatID)
+	} else if s.chatRepo != nil {
+		chat, err := s.chatRepo.FindByChatID(ctx, conv.ChatID)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				return nil, err

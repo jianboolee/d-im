@@ -4,32 +4,30 @@ import (
 	"context"
 	"fmt"
 
-	"d-im/pkg/model"
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/pkg/types"
-
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // SingleRouter 单聊路由策略
 type SingleRouter struct {
-	chatColl *mongo.Collection
+	chatRepo *chatRepo.ChatRepo
 }
 
 // NewSingleRouter 创建单聊路由器
-func NewSingleRouter(chatColl *mongo.Collection) *SingleRouter {
-	return &SingleRouter{chatColl: chatColl}
+func NewSingleRouter(chatRepo *chatRepo.ChatRepo) *SingleRouter {
+	return &SingleRouter{chatRepo: chatRepo}
 }
 
 // Route 单聊路由：查询会话成员，接收者是非发送者的另一方。
 func (r *SingleRouter) Route(chatID string, fromUID string) (*RouteResult, error) {
-	if r.chatColl == nil {
+	if r.chatRepo == nil {
 		return &RouteResult{
 			ChatID:   chatID,
 			ChatType: types.ChatTypeSingle,
 		}, nil
 	}
 
-	members, err := model.GetChatMembers(context.Background(), r.chatColl, chatID)
+	members, err := r.chatRepo.GetMembers(context.Background(), chatID)
 	if err != nil {
 		return nil, fmt.Errorf("get single chat members: %w", err)
 	}

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
 
 	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 var ErrForbidden = errors.New("forbidden")
@@ -17,7 +17,7 @@ var ErrForbidden = errors.New("forbidden")
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
 	repo     *repository.MessageRepo
-	chatColl *mongo.Collection
+	chatRepo *chatRepo.ChatRepo
 	groups   messageGroupReader
 	convMgr  *model.ConversationManager
 	natsPub  *natsq.Publisher
@@ -29,10 +29,10 @@ type messageGroupReader interface {
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, chatColl *mongo.Collection, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, chatRepo *chatRepo.ChatRepo, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
 		repo:     repo,
-		chatColl: chatColl,
+		chatRepo: chatRepo,
 		convMgr:  convMgr,
 		natsPub:  natsPub,
 	}

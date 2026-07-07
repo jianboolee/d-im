@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/conversation/service"
 	"d-im/internal/gateway/handler/middleware"
 	"d-im/pkg/model"
@@ -20,7 +21,7 @@ import (
 // ConversationHandler 会话HTTP处理器
 type ConversationHandler struct {
 	convSvc  *service.ConversationService
-	chatColl *mongo.Collection
+	chatRepo *chatRepo.ChatRepo
 	groups   conversationGroupReader
 	users    userReader
 }
@@ -31,8 +32,8 @@ type conversationGroupReader interface {
 }
 
 // NewConversationHandler 创建会话处理器
-func NewConversationHandler(convSvc *service.ConversationService, chatColl *mongo.Collection, groups conversationGroupReader, users userReader) *ConversationHandler {
-	return &ConversationHandler{convSvc: convSvc, chatColl: chatColl, groups: groups, users: users}
+func NewConversationHandler(convSvc *service.ConversationService, chatRepo *chatRepo.ChatRepo, groups conversationGroupReader, users userReader) *ConversationHandler {
+	return &ConversationHandler{convSvc: convSvc, chatRepo: chatRepo, groups: groups, users: users}
 }
 
 // ListConversations 获取用户会话列表
@@ -256,8 +257,8 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 	avatar := ""
 	groupID := ""
 
-	if h.chatColl != nil {
-		if chat, err := model.FindChatByID(ctx, h.chatColl, conv.ChatID); err == nil {
+	if h.chatRepo != nil {
+		if chat, err := h.chatRepo.FindByChatID(ctx, conv.ChatID); err == nil {
 			if conv.ChatType == types.ChatTypeSingle {
 				participants = append(participants, chat.Members...)
 			}
