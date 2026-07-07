@@ -6,6 +6,17 @@
 
 Push Service 是 IM 系统中专门负责**离线消息推送**的独立微服务，通过 APNs/FCM/极光推送等第三方通道，将消息送达至离线用户的设备。
 
+
+```go
+// Push Service - 第三方推送服务
+// "Push Service 专指通过 APNs/FCM 等第三方通道的推送"
+
+type PushService struct {
+    // 注意：这里的 Push 特指第三方通道推送
+    // 不包括 WebSocket 实时推送
+}
+```
+
 ### 1.2 核心职责
 
 | 职责 | 说明 |
