@@ -7,25 +7,27 @@ import (
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
 	"d-im/pkg/snowflake"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
-	repo    *repository.MessageRepo
-	idGen   *snowflake.Generator
-	chatMgr *model.ChatIDManager
-	convMgr *model.ConversationManager
-	natsPub *natsq.Publisher
+	repo     *repository.MessageRepo
+	idGen    *snowflake.Generator
+	chatColl *mongo.Collection
+	convMgr  *model.ConversationManager
+	natsPub  *natsq.Publisher
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, idGen *snowflake.Generator, chatMgr *model.ChatIDManager, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, idGen *snowflake.Generator, chatColl *mongo.Collection, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
-		repo:    repo,
-		idGen:   idGen,
-		chatMgr: chatMgr,
-		convMgr: convMgr,
-		natsPub: natsPub,
+		repo:     repo,
+		idGen:    idGen,
+		chatColl: chatColl,
+		convMgr:  convMgr,
+		natsPub:  natsPub,
 	}
 }
 

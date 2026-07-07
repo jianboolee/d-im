@@ -17,20 +17,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type chatReader interface {
-	FindByChatID(ctx context.Context, chatID string) (*model.Chat, error)
-}
-
 // ConversationHandler 会话HTTP处理器
 type ConversationHandler struct {
-	convSvc *service.ConversationService
-	chats   chatReader
-	users   userReader
+	convSvc  *service.ConversationService
+	chatColl *mongo.Collection
+	users    userReader
 }
 
 // NewConversationHandler 创建会话处理器
-func NewConversationHandler(convSvc *service.ConversationService, chats chatReader, users userReader) *ConversationHandler {
-	return &ConversationHandler{convSvc: convSvc, chats: chats, users: users}
+func NewConversationHandler(convSvc *service.ConversationService, chatColl *mongo.Collection, users userReader) *ConversationHandler {
+	return &ConversationHandler{convSvc: convSvc, chatColl: chatColl, users: users}
 }
 
 // ListConversations 获取用户会话列表
@@ -254,8 +250,8 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 	avatar := ""
 	groupID := ""
 
-	if h.chats != nil {
-		if chat, err := h.chats.FindByChatID(ctx, conv.ChatID); err == nil {
+	if h.chatColl != nil {
+		if chat, err := model.FindChatByID(ctx, h.chatColl, conv.ChatID); err == nil {
 			participants = append(participants, chat.Members...)
 			if title == "" {
 				title = chat.Name

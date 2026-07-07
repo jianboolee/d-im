@@ -80,22 +80,22 @@ func main() {
 	}
 	defer natsPub.Close()
 
-	chatMgr := model.NewChatIDManager(db, idGen)
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db, idGen)
-	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatMgr, convMgr, natsPub)
+	chatColl := model.ChatCollection(db)
+	msgSvc := messageSvc.NewMessageService(msgRepo, idGen, chatColl, convMgr, natsPub)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
 	if err != nil {
 		log.Fatalf("media storage: %v", err)
 	}
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
-	conversationSvc := convSvc.NewConversationService(convMgr, chatMgr)
+	conversationSvc := convSvc.NewConversationService(convMgr, chatColl)
 	uRepo := userRepo.NewUserRepo(db)
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
-	convHandler := handler.NewConversationHandler(conversationSvc, chatMgr, uRepo)
-	groupService := groupSvc.NewGroupService(chatMgr, convMgr)
+	convHandler := handler.NewConversationHandler(conversationSvc, chatColl, uRepo)
+	groupService := groupSvc.NewGroupService(chatColl, convMgr)
 	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)

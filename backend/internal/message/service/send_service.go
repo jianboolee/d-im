@@ -97,12 +97,12 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 			return nil, fmt.Errorf("find existing message: %w", err)
 		}
 	}
-	if s.chatMgr == nil {
-		return nil, fmt.Errorf("chat manager is required")
+	if s.chatColl == nil {
+		return nil, fmt.Errorf("chat collection is required")
 	}
 
 	msgID := s.GenerateMsgID()
-	msgSeq, err := s.chatMgr.NextMessageSeq(ctx, req.ChatID)
+	msgSeq, err := model.NextChatMessageSeq(ctx, s.chatColl, req.ChatID)
 	if err != nil {
 		return nil, fmt.Errorf("next message seq: %w", err)
 	}
@@ -112,8 +112,8 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		clientTime = now
 	}
 	targetUIDs := req.TargetUIDs
-	if len(targetUIDs) == 0 && s.chatMgr != nil {
-		members, err := s.chatMgr.GetMembers(ctx, req.ChatID)
+	if len(targetUIDs) == 0 && s.chatColl != nil {
+		members, err := model.GetChatMembers(ctx, s.chatColl, req.ChatID)
 		if err != nil {
 			return nil, fmt.Errorf("get chat members: %w", err)
 		}

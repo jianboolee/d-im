@@ -6,9 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"d-im/pkg/snowflake"
 	"d-im/pkg/types"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -32,18 +32,14 @@ type Chat struct {
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
 }
 
-// ChatIDManager ChatID管理器
-type ChatIDManager struct {
-	chatColl *mongo.Collection
-	idGen    *snowflake.Generator
+// ChatCollection 返回 chats 集合。
+func ChatCollection(db *mongo.Database) *mongo.Collection {
+	return db.Collection("chats")
 }
 
-// NewChatIDManager 创建ChatID管理器
-func NewChatIDManager(db *mongo.Database, idGen *snowflake.Generator) *ChatIDManager {
-	return &ChatIDManager{
-		chatColl: db.Collection("chats"),
-		idGen:    idGen,
-	}
+// GenerateChatID 生成不可语义化的会话实体ID（UUID v7）。
+func GenerateChatID() string {
+	return "chat_" + uuid.Must(uuid.NewV7()).String()
 }
 
 // GenerateSingleChatKey 生成单聊幂等键。它只用于唯一约束，不作为公开会话ID。
@@ -60,16 +56,11 @@ func GenerateSingleChatID(uid1, uid2 string) string {
 	return fmt.Sprintf("single_%s_%s", uids[0], uids[1])
 }
 
-// GenerateChatID 生成不可语义化的会话实体ID。
-func (m *ChatIDManager) GenerateChatID() string {
-	return "chat_" + m.idGen.GenerateString()
-}
-
 // CreateOrGetSingleChat 获取或创建单聊会话
-func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*Chat, error) {
+func CreateOrGetSingleChat(ctx context.Context, coll *mongo.Collection, uid1, uid2 string) (*Chat, error) {
 	singleKey := GenerateSingleChatKey(uid1, uid2)
 	legacyChatID := GenerateSingleChatID(uid1, uid2)
-	chatID := m.GenerateChatID()
+	chatID := GenerateChatID()
 	now := time.Now()
 
 	filter := bson.M{"$or": bson.A{
@@ -96,7 +87,7 @@ func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 st
 		SetReturnDocument(options.After)
 
 	var chat Chat
-	err := m.chatColl.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
+	err := coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +95,8 @@ func (m *ChatIDManager) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 st
 }
 
 // CreateGroupChat 创建群聊
-func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerUID string, memberUIDs []string) (*Chat, error) {
-	chatID := m.GenerateChatID()
+func CreateGroupChat(ctx context.Context, coll *mongo.Collection, name string, ownerUID string, memberUIDs []string) (*Chat, error) {
+	chatID := GenerateChatID()
 
 	allMembers := append([]string{ownerUID}, memberUIDs...)
 	allMembers = uniqueStrings(allMembers)
@@ -124,12 +115,12 @@ func (m *ChatIDManager) CreateGroupChat(ctx context.Context, name string, ownerU
 		UpdatedAt:   now,
 	}
 
-	_, err := m.chatColl.InsertOne(ctx, chat)
+	_, err := coll.InsertOne(ctx, chat)
 	return chat, err
 }
 
-// AddMember 添加群成员
-func (m *ChatIDManager) AddMember(ctx context.Context, chatID string, uid string) error {
+// AddChatMember 添加群成员
+func AddChatMember(ctx context.Context, coll *mongo.Collection, chatID string, uid string) error {
 	filter := bson.M{
 		"chat_id":   chatID,
 		"chat_type": types.ChatTypeGroup,
@@ -140,12 +131,12 @@ func (m *ChatIDManager) AddMember(ctx context.Context, chatID string, uid string
 		"$inc":      bson.M{"member_count": 1},
 		"$set":      bson.M{"updated_at": time.Now()},
 	}
-	_, err := m.chatColl.UpdateOne(ctx, filter, update)
+	_, err := coll.UpdateOne(ctx, filter, update)
 	return err
 }
 
-// RemoveMember 移除群成员
-func (m *ChatIDManager) RemoveMember(ctx context.Context, chatID string, uid string) error {
+// RemoveChatMember 移除群成员
+func RemoveChatMember(ctx context.Context, coll *mongo.Collection, chatID string, uid string) error {
 	filter := bson.M{
 		"chat_id":   chatID,
 		"chat_type": types.ChatTypeGroup,
@@ -156,12 +147,12 @@ func (m *ChatIDManager) RemoveMember(ctx context.Context, chatID string, uid str
 		"$inc":  bson.M{"member_count": -1},
 		"$set":  bson.M{"updated_at": time.Now()},
 	}
-	_, err := m.chatColl.UpdateOne(ctx, filter, update)
+	_, err := coll.UpdateOne(ctx, filter, update)
 	return err
 }
 
-// UpdateGroupName 修改群名称。
-func (m *ChatIDManager) UpdateGroupName(ctx context.Context, chatID string, name string) (*Chat, error) {
+// UpdateGroupChatName 修改群名称。
+func UpdateGroupChatName(ctx context.Context, coll *mongo.Collection, chatID string, name string) (*Chat, error) {
 	update := bson.M{
 		"$set": bson.M{
 			"name":       name,
@@ -171,7 +162,7 @@ func (m *ChatIDManager) UpdateGroupName(ctx context.Context, chatID string, name
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 
 	var chat Chat
-	err := m.chatColl.FindOneAndUpdate(ctx, bson.M{
+	err := coll.FindOneAndUpdate(ctx, bson.M{
 		"chat_id":   chatID,
 		"chat_type": types.ChatTypeGroup,
 	}, update, opts).Decode(&chat)
@@ -181,28 +172,28 @@ func (m *ChatIDManager) UpdateGroupName(ctx context.Context, chatID string, name
 	return &chat, nil
 }
 
-// GetMembers 查询群成员列表
-func (m *ChatIDManager) GetMembers(ctx context.Context, chatID string) ([]string, error) {
+// GetChatMembers 查询群成员列表
+func GetChatMembers(ctx context.Context, coll *mongo.Collection, chatID string) ([]string, error) {
 	var chat Chat
-	err := m.chatColl.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
+	err := coll.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
 	if err != nil {
 		return nil, err
 	}
 	return chat.Members, nil
 }
 
-// FindByChatID 根据chatID查询Chat
-func (m *ChatIDManager) FindByChatID(ctx context.Context, chatID string) (*Chat, error) {
+// FindChatByID 根据chatID查询Chat
+func FindChatByID(ctx context.Context, coll *mongo.Collection, chatID string) (*Chat, error) {
 	var chat Chat
-	err := m.chatColl.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
+	err := coll.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
 	if err != nil {
 		return nil, err
 	}
 	return &chat, nil
 }
 
-// NextMessageSeq 为指定 chat 原子分配下一条消息序号。
-func (m *ChatIDManager) NextMessageSeq(ctx context.Context, chatID string) (int64, error) {
+// NextChatMessageSeq 为指定 chat 原子分配下一条消息序号。
+func NextChatMessageSeq(ctx context.Context, coll *mongo.Collection, chatID string) (int64, error) {
 	now := time.Now()
 	update := bson.M{
 		"$inc": bson.M{"last_seq": 1},
@@ -211,7 +202,7 @@ func (m *ChatIDManager) NextMessageSeq(ctx context.Context, chatID string) (int6
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 
 	var chat Chat
-	err := m.chatColl.FindOneAndUpdate(ctx, bson.M{"chat_id": chatID}, update, opts).Decode(&chat)
+	err := coll.FindOneAndUpdate(ctx, bson.M{"chat_id": chatID}, update, opts).Decode(&chat)
 	if err != nil {
 		return 0, err
 	}

@@ -8,6 +8,8 @@ import (
 
 	"d-im/pkg/model"
 	"d-im/pkg/types"
+
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // SingleRouter 单聊路由策略
@@ -52,24 +54,24 @@ func (r *SingleRouter) Route(chatID string, fromUID string) (*RouteResult, error
 
 // GroupRouter 群聊路由策略
 type GroupRouter struct {
-	chatMgr *model.ChatIDManager
+	chatColl *mongo.Collection
 }
 
 // NewGroupRouter 创建群聊路由器
-func NewGroupRouter(chatMgr *model.ChatIDManager) *GroupRouter {
-	return &GroupRouter{chatMgr: chatMgr}
+func NewGroupRouter(chatColl *mongo.Collection) *GroupRouter {
+	return &GroupRouter{chatColl: chatColl}
 }
 
 // Route 群聊路由：需要查询群成员列表，排除发送者
 func (r *GroupRouter) Route(chatID string, fromUID string) (*RouteResult, error) {
-	if r.chatMgr == nil {
+	if r.chatColl == nil {
 		return &RouteResult{
 			ChatID:   chatID,
 			ChatType: types.ChatTypeGroup,
 		}, nil
 	}
 
-	members, err := r.chatMgr.GetMembers(context.Background(), chatID)
+	members, err := model.GetChatMembers(context.Background(), r.chatColl, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("get group members: %w", err)
 	}

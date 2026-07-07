@@ -13,15 +13,15 @@ import (
 
 // GroupService 群组服务
 type GroupService struct {
-	chatMgr *model.ChatIDManager
-	convMgr *model.ConversationManager
+	chatColl *mongo.Collection
+	convMgr  *model.ConversationManager
 }
 
 // NewGroupService 创建群组服务
-func NewGroupService(chatMgr *model.ChatIDManager, convMgr *model.ConversationManager) *GroupService {
+func NewGroupService(chatColl *mongo.Collection, convMgr *model.ConversationManager) *GroupService {
 	return &GroupService{
-		chatMgr: chatMgr,
-		convMgr: convMgr,
+		chatColl: chatColl,
+		convMgr:  convMgr,
 	}
 }
 
@@ -31,7 +31,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 	if name == "" {
 		return nil, fmt.Errorf("group name is required")
 	}
-	chat, err := s.chatMgr.CreateGroupChat(ctx, name, ownerUID, memberUIDs)
+	chat, err := model.CreateGroupChat(ctx, s.chatColl, name, ownerUID, memberUIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 
 // GetGroupForMember 查询群，并校验当前用户仍在群内。
 func (s *GroupService) GetGroupForMember(ctx context.Context, chatID, uid string) (*model.Chat, error) {
-	chat, err := s.chatMgr.FindByChatID(ctx, chatID)
+	chat, err := model.FindChatByID(ctx, s.chatColl, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,12 +61,12 @@ func (s *GroupService) GetGroupForMember(ctx context.Context, chatID, uid string
 
 // AddMember 添加群成员
 func (s *GroupService) AddMember(ctx context.Context, chatID, uid string) error {
-	if err := s.chatMgr.AddMember(ctx, chatID, uid); err != nil {
+	if err := model.AddChatMember(ctx, s.chatColl, chatID, uid); err != nil {
 		return err
 	}
 
 	// 为新成员创建会话视图
-	chat, err := s.chatMgr.FindByChatID(ctx, chatID)
+	chat, err := model.FindChatByID(ctx, s.chatColl, chatID)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (s *GroupService) AddMember(ctx context.Context, chatID, uid string) error 
 
 // AddMembers 批量邀请群成员。
 func (s *GroupService) AddMembers(ctx context.Context, chatID string, uidList []string) (*model.Chat, error) {
-	chat, err := s.chatMgr.FindByChatID(ctx, chatID)
+	chat, err := model.FindChatByID(ctx, s.chatColl, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +93,12 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID string, uidList []
 			return nil, err
 		}
 	}
-	return s.chatMgr.FindByChatID(ctx, chatID)
+	return model.FindChatByID(ctx, s.chatColl, chatID)
 }
 
 // RemoveMember 移除群成员
 func (s *GroupService) RemoveMember(ctx context.Context, chatID, uid string) error {
-	if err := s.chatMgr.RemoveMember(ctx, chatID, uid); err != nil {
+	if err := model.RemoveChatMember(ctx, s.chatColl, chatID, uid); err != nil {
 		return err
 	}
 	return s.convMgr.MarkLeft(ctx, uid, chatID)
@@ -106,7 +106,7 @@ func (s *GroupService) RemoveMember(ctx context.Context, chatID, uid string) err
 
 // GetMembers 获取群成员列表
 func (s *GroupService) GetMembers(ctx context.Context, chatID string) ([]string, error) {
-	return s.chatMgr.GetMembers(ctx, chatID)
+	return model.GetChatMembers(ctx, s.chatColl, chatID)
 }
 
 // UpdateName 修改群名称。
@@ -115,7 +115,7 @@ func (s *GroupService) UpdateName(ctx context.Context, chatID, name string) (*mo
 	if name == "" {
 		return nil, fmt.Errorf("group name is required")
 	}
-	return s.chatMgr.UpdateGroupName(ctx, chatID, name)
+	return model.UpdateGroupChatName(ctx, s.chatColl, chatID, name)
 }
 
 func containsString(items []string, target string) bool {
