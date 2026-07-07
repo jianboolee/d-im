@@ -29,37 +29,37 @@ func (a *CompositeEventAdapter) PublishGroupSystemEvent(ctx context.Context, eve
 	if a.pub == nil || event.EventType == "" {
 		return nil
 	}
-	// 1. 发布到 im.message.send，创建系统消息 + 触发推送管道
 	a.publishMessageSend(event)
-
-	// 2. 发布到 dim.group.*，结构化领域事件
 	a.publishDomainEvent(event)
-
 	return nil
 }
 
-// publishMessageSend 将群系统事件转为 SendMessageReq，发布到 im.message.send。
 func (a *CompositeEventAdapter) publishMessageSend(event groupSvc.GroupSystemEvent) {
 	text := event.Text
 	if text == "" {
 		text = event.EventType
 	}
+	contentBytes, err := json.Marshal(types.SystemEventContent{
+		EventType:     event.EventType,
+		Text:          text,
+		Title:         text,
+		OperatorID:    event.OperatorUID,
+		TargetUserIDs: event.TargetUIDs,
+		GroupID:       event.GroupID,
+		GroupName:     event.GroupName,
+		BeforeValue:   event.BeforeValue,
+		AfterValue:    event.AfterValue,
+	})
+	if err != nil {
+		log.Printf("[composite_adapter] marshal system event content failed: %v", err)
+		return
+	}
 	req := service.SendMessageReq{
-		ChatID:   event.GroupID,
-		ChatType: types.ChatTypeGroup,
-		SenderID: event.OperatorUID,
-		MsgType:  types.MessageTypeSystemEvent,
-		Content: types.SystemEventContent{
-			EventType:     event.EventType,
-			Text:          text,
-			Title:         text,
-			OperatorID:    event.OperatorUID,
-			TargetUserIDs: event.TargetUIDs,
-			GroupID:       event.GroupID,
-			GroupName:     event.GroupName,
-			BeforeValue:   event.BeforeValue,
-			AfterValue:    event.AfterValue,
-		},
+		ChatID:     event.GroupID,
+		ChatType:   types.ChatTypeGroup,
+		SenderID:   event.OperatorUID,
+		MsgType:    types.MessageTypeSystemEvent,
+		Content:    contentBytes,
 		ClientTime: time.Now(),
 	}
 	data, err := json.Marshal(req)
@@ -72,7 +72,6 @@ func (a *CompositeEventAdapter) publishMessageSend(event groupSvc.GroupSystemEve
 	}
 }
 
-// publishDomainEvent 发布结构化领域事件到 dim.group.*。
 func (a *CompositeEventAdapter) publishDomainEvent(event groupSvc.GroupSystemEvent) {
 	subject := "dim.group." + toSnakeCase(event.EventType)
 	data, err := json.Marshal(event)

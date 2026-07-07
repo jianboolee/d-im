@@ -108,12 +108,18 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		clientTime = parsed
 	}
 
+	contentBytes, err := json.Marshal(content)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, 500301, "marshal content failed")
+		return
+	}
+
 	req := &messageSvc.SendMessageReq{
 		ChatID:      raw.ChatID,
 		ChatType:    chatType,
 		SenderID:    uid,
 		MsgType:     raw.MessageType,
-		Content:     content,
+		Content:     contentBytes,
 		ClientMsgID: raw.ClientMessageID,
 		ClientTime:  clientTime,
 		QuoteMsgID:  raw.QuoteMessageID,
@@ -129,8 +135,9 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPISuccess(w, map[string]interface{}{
-		"status":  "accepted",
-		"chat_id": raw.ChatID,
+		"status":            "accepted",
+		"chat_id":           raw.ChatID,
+		"client_message_id": raw.ClientMessageID,
 	})
 }
 

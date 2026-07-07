@@ -11,6 +11,8 @@ import (
 	"time"
 
 	chatRepo "d-im/internal/chat/repository"
+	groupRepo "d-im/internal/group/repository"
+	groupSvc "d-im/internal/group/service"
 	"d-im/internal/message/dispatcher"
 	"d-im/internal/message/repository"
 	"d-im/internal/message/service"
@@ -64,9 +66,13 @@ func main() {
 
 	// 初始化
 	chatR := chatRepo.NewChatRepo(db)
+	gRepo := groupRepo.NewGroupRepo(db)
+	mRepo := groupRepo.NewMemberRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db)
 	msgSvc := service.NewMessageService(msgRepo, chatR, convMgr, natsPub)
+	groupService := groupSvc.NewGroupService(db, chatR, gRepo, mRepo, convMgr)
+	msgSvc.SetGroupReader(groupService)
 
 	// 分发器
 	d := dispatcher.NewDispatcher(msgRepo, 4)

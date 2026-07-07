@@ -93,3 +93,43 @@ func TestBuildWSConversationDTOUsesReceiverState(t *testing.T) {
 		t.Fatalf("expected muted and pinned true, got muted=%v pinned=%v", dto.Muted, dto.Pinned)
 	}
 }
+
+func TestBuildMailboxDeliveriesIncludesSenderAndRecipients(t *testing.T) {
+	msg := &model.Message{
+		MsgID:  "msg_001",
+		ChatID: "chat_001",
+		Seq:    7,
+	}
+
+	mailboxes, byUID := buildMailboxDeliveries(msg, "user_a", []string{"user_b", "user_a", "", "user_b"})
+
+	if len(mailboxes) != 2 {
+		t.Fatalf("expected 2 unique mailbox deliveries, got %d", len(mailboxes))
+	}
+	if byUID["user_a"] == nil || byUID["user_a"].Status != types.MessageStatusSent {
+		t.Fatalf("expected sender mailbox status sent, got %#v", byUID["user_a"])
+	}
+	if byUID["user_b"] == nil || byUID["user_b"].Status != types.MessageStatusDelivered {
+		t.Fatalf("expected recipient mailbox status delivered, got %#v", byUID["user_b"])
+	}
+	for uid, mailbox := range byUID {
+		if mailbox.ChatID != "chat_001" || mailbox.MsgID != "msg_001" || mailbox.MessageSeq != 7 {
+			t.Fatalf("unexpected mailbox for uid=%s: %#v", uid, mailbox)
+		}
+		if mailbox.SeqID == "" {
+			t.Fatalf("expected mailbox seq id for uid=%s", uid)
+		}
+	}
+}
+
+func TestSortedMailboxUIDsUsesDeliverySet(t *testing.T) {
+	uids := sortedMailboxUIDs(map[string]*model.UserMailbox{
+		"user_b": {},
+		"user_a": {},
+		"":       {},
+	})
+
+	if len(uids) != 2 || uids[0] != "user_a" || uids[1] != "user_b" {
+		t.Fatalf("expected sorted non-empty mailbox uids, got %#v", uids)
+	}
+}

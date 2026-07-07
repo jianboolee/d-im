@@ -809,6 +809,9 @@ const mergeMessages = (incoming: ChatMessage[]) => {
       ...existing,
       ...msg,
       status: msg.sender_id === currentUserId.value ? 'sent' : msg.status,
+      uploadState: existing?.uploadState && msg.id && !msg.id.startsWith('temp-')
+        ? undefined
+        : existing?.uploadState,
     }
 
     if (existingIndex === -1) {
@@ -832,14 +835,6 @@ const mergeMessages = (incoming: ChatMessage[]) => {
   })
 
   messages.value = sortMessages(deduped)
-}
-
-const confirmPendingMessage = (pendingId: string, confirmed: ChatMessage) => {
-  if (!confirmed.client_message_id && !confirmed.id) {
-    messages.value = messages.value.filter((msg) => msg.id !== pendingId)
-    return
-  }
-  mergeMessages([{ ...confirmed, status: 'sent', uploadState: undefined }])
 }
 
 const syncConversationByMessage = (message: ChatMessage, shouldScroll = false) => {
@@ -894,16 +889,12 @@ const sendMessage = async () => {
   scrollToBottom(true, true)
 
   try {
-    const response = await imStore.imSDK?.sendMessage(
+    await imStore.imSDK?.sendMessage(
       activeChatId.value,
       MessageType.Text,
       { text: content },
       clientMessageId,
     )
-    if (response) {
-      confirmPendingMessage(tempMessage.id!, response)
-      syncConversationByMessage(response, true)
-    }
   } catch (error) {
     console.error('发送消息失败:', error)
     const messageIndex = messages.value.findIndex((msg) => msg.id === tempMessage.id)
@@ -1129,16 +1120,12 @@ const retryMessage = async (message: ChatMessage) => {
   messages.value = [...messages.value]
 
   try {
-    const response = await imStore.imSDK?.sendMessage(
+    await imStore.imSDK?.sendMessage(
       activeChatId.value,
       message.type ?? MessageType.Text,
       message.content,
       clientMessageId,
     )
-    if (response) {
-      confirmPendingMessage(message.id!, response)
-      syncConversationByMessage(response, true)
-    }
   } catch (error) {
     console.error('重新发送消息失败:', error)
     if (messages.value[messageIndex]) {
@@ -1172,7 +1159,7 @@ const retryUploadImageMessage = async (message: ChatMessage, messageIndex: numbe
     const w = uploaded.width ?? dimensions.width
     const h = uploaded.height ?? dimensions.height
 
-    const response = await imStore.imSDK?.sendMessage(
+    await imStore.imSDK?.sendMessage(
       activeChatId.value,
       MessageType.Image,
       {
@@ -1185,13 +1172,9 @@ const retryUploadImageMessage = async (message: ChatMessage, messageIndex: numbe
       },
       clientMessageId,
     )
-    if (response) {
-      const previewUrl = current.content.url
-      confirmPendingMessage(current.id!, response)
-      syncConversationByMessage(response, true)
-      if (previewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(previewUrl)
-      }
+    const previewUrl = current.content.url
+    if (previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl)
     }
   } catch (error) {
     console.error('重新上传图片失败:', error)
@@ -1267,7 +1250,7 @@ const handleUploadSuccess = async (file: File, type: string, uploaded: { url: st
   const previewUrl = current.content.url
 
   try {
-    const response = await imStore.imSDK?.sendMessage(
+    await imStore.imSDK?.sendMessage(
       activeChatId.value,
       messageType,
       {
@@ -1280,13 +1263,9 @@ const handleUploadSuccess = async (file: File, type: string, uploaded: { url: st
       } as MessageContent,
       current.client_message_id,
     )
-    if (response) {
-      confirmPendingMessage(current.id!, response)
-      syncConversationByMessage(response, true)
-      pendingUploadMessageIds.delete(file)
-      if (previewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(previewUrl)
-      }
+    pendingUploadMessageIds.delete(file)
+    if (previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl)
     }
   } catch (error) {
     console.error('发送媒体消息失败:', error)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"d-im/pkg/model"
@@ -14,17 +15,86 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// ParseContent 根据消息类型将 RawMessage 解析为 ContentType。
+func ParseContent(msgType types.MessageType, raw json.RawMessage) (types.ContentType, error) {
+	switch msgType {
+	case types.MessageTypeText:
+		var c types.TextContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeSystemEvent:
+		var c types.SystemEventContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeImage:
+		var c types.ImageContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeVideo:
+		var c types.VideoContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeVoice:
+		var c types.VoiceContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeCard:
+		var c types.CardContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeLink:
+		var c types.LinkContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeTemplate:
+		var c types.TemplateContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeFile:
+		var c types.FileContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	case types.MessageTypeLocation:
+		var c types.LocationContent
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		return c, nil
+	default:
+		return nil, fmt.Errorf("unsupported message type: %s", msgType)
+	}
+}
+
 // ErrChatRepoRequired chat repository is required.
 var ErrChatRepoRequired = fmt.Errorf("chat repository is required")
 
-// SendMessageReq 发送消息请求
+// SendMessageReq 发送消息请求。
+// Content 使用 json.RawMessage 以支持 NATS 序列化/反序列化。
 type SendMessageReq struct {
 	ChatID      string            `json:"chat_id"`
 	ChatType    types.ChatType    `json:"chat_type"`
 	SenderID    string            `json:"sender_id"`
 	SenderName  string            `json:"sender_name"`
 	MsgType     types.MessageType `json:"msg_type"`
-	Content     types.ContentType `json:"content"`
+	Content     json.RawMessage   `json:"content"`
 	ClientMsgID string            `json:"client_message_id,omitempty"`
 	ClientTime  time.Time         `json:"client_time"`
 	TargetUIDs  []string          `json:"target_uids,omitempty"`
@@ -86,7 +156,11 @@ type wsConversationDTO struct {
 
 // Send 发送消息（构建消息 → 存储 → 分发 → NATS 推送）
 func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMessageResp, error) {
-	if err := req.Content.Validate(); err != nil {
+	content, err := ParseContent(req.MsgType, req.Content)
+	if err != nil {
+		return nil, fmt.Errorf("parse content: %w", err)
+	}
+	if err := content.Validate(); err != nil {
 		return nil, fmt.Errorf("content validation failed: %w", err)
 	}
 	if req.ChatID == "" {
@@ -147,8 +221,8 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		SenderID:       req.SenderID,
 		SenderName:     req.SenderName,
 		MsgType:        req.MsgType,
-		Content:        req.Content,
-		ContentPreview: types.BuildContentPreview(req.MsgType, req.Content),
+		Content:        content,
+		ContentPreview: types.BuildContentPreview(req.MsgType, content),
 		Status:         types.MessageStatusSent,
 		ClientTime:     clientTime,
 		ServerTime:     now,
@@ -198,9 +272,11 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		s.markSenderMessageRead(ctx, req.SenderID, msg)
 	}
 
-	// 通过 NATS 发布推送事件，通知 connector
+	// 通过 NATS 发布推送事件，通知 connector。
+	// 推送目标以 mailbox 投递结果为准：异步发送模式下，发送端也需要通过
+	// connector 收到服务端确认后的 canonical message。
 	if s.natsPub != nil {
-		s.publishPushEvent(ctx, msg, targetUIDs, mailboxByUID)
+		s.publishPushEvent(ctx, msg, mailboxByUID)
 	}
 
 	return &SendMessageResp{
@@ -285,20 +361,21 @@ func (s *MessageService) findSenderMailbox(ctx context.Context, uid, chatID, msg
 }
 
 func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Message, senderUID string, targetUIDs []string) (map[string]*model.UserMailbox, error) {
+	mailboxes, mailboxByUID := buildMailboxDeliveries(msg, senderUID, targetUIDs)
+	if err := s.repo.BatchInsertToMailbox(ctx, mailboxes); err != nil {
+		return nil, err
+	}
+	return mailboxByUID, nil
+}
+
+func buildMailboxDeliveries(msg *model.Message, senderUID string, targetUIDs []string) ([]*model.UserMailbox, map[string]*model.UserMailbox) {
 	seen := make(map[string]bool, len(targetUIDs)+1)
 	mailboxes := make([]*model.UserMailbox, 0, len(targetUIDs)+1)
 	mailboxByUID := make(map[string]*model.UserMailbox, len(targetUIDs)+1)
 
 	if senderUID != "" {
 		seen[senderUID] = true
-		senderMailbox := &model.UserMailbox{
-			UID:        senderUID,
-			ChatID:     msg.ChatID,
-			MsgID:      msg.MsgID,
-			MessageSeq: msg.Seq,
-			SeqID:      uuid.Must(uuid.NewV7()).String(),
-			Status:     types.MessageStatusSent,
-		}
+		senderMailbox := newMailboxDelivery(senderUID, msg, types.MessageStatusSent)
 		mailboxes = append(mailboxes, senderMailbox)
 		mailboxByUID[senderUID] = senderMailbox
 	}
@@ -308,21 +385,22 @@ func (s *MessageService) distributeToMailbox(ctx context.Context, msg *model.Mes
 			continue
 		}
 		seen[uid] = true
-		mailbox := &model.UserMailbox{
-			UID:        uid,
-			ChatID:     msg.ChatID,
-			MsgID:      msg.MsgID,
-			MessageSeq: msg.Seq,
-			SeqID:      uuid.Must(uuid.NewV7()).String(),
-			Status:     types.MessageStatusDelivered,
-		}
+		mailbox := newMailboxDelivery(uid, msg, types.MessageStatusDelivered)
 		mailboxes = append(mailboxes, mailbox)
 		mailboxByUID[uid] = mailbox
 	}
-	if err := s.repo.BatchInsertToMailbox(ctx, mailboxes); err != nil {
-		return nil, err
+	return mailboxes, mailboxByUID
+}
+
+func newMailboxDelivery(uid string, msg *model.Message, status types.MessageStatus) *model.UserMailbox {
+	return &model.UserMailbox{
+		UID:        uid,
+		ChatID:     msg.ChatID,
+		MsgID:      msg.MsgID,
+		MessageSeq: msg.Seq,
+		SeqID:      uuid.Must(uuid.NewV7()).String(),
+		Status:     status,
 	}
-	return mailboxByUID, nil
 }
 
 func excludeUID(uids []string, excluded string) []string {
@@ -348,8 +426,8 @@ func uniqueUIDs(uids []string) []string {
 	return result
 }
 
-func (s *MessageService) publishPushEvent(ctx context.Context, msg *model.Message, targetUIDs []string, mailboxByUID map[string]*model.UserMailbox) {
-	for _, uid := range targetUIDs {
+func (s *MessageService) publishPushEvent(ctx context.Context, msg *model.Message, mailboxByUID map[string]*model.UserMailbox) {
+	for _, uid := range sortedMailboxUIDs(mailboxByUID) {
 		envelope, err := s.buildMessageEnvelope(ctx, uid, msg, mailboxByUID[uid])
 		if err != nil {
 			log.Printf("[send_service] build push envelope failed: uid=%s msg_id=%s err=%v", uid, msg.MsgID, err)
@@ -364,6 +442,17 @@ func (s *MessageService) publishPushEvent(ctx context.Context, msg *model.Messag
 			log.Printf("[send_service] nats publish failed: subject=%s, err=%v", subject, err)
 		}
 	}
+}
+
+func sortedMailboxUIDs(mailboxByUID map[string]*model.UserMailbox) []string {
+	uids := make([]string, 0, len(mailboxByUID))
+	for uid := range mailboxByUID {
+		if uid != "" {
+			uids = append(uids, uid)
+		}
+	}
+	sort.Strings(uids)
+	return uids
 }
 
 func (s *MessageService) buildMessageEnvelope(ctx context.Context, uid string, msg *model.Message, mailbox *model.UserMailbox) (*wsEnvelope, error) {

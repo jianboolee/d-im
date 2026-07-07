@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"d-im/pkg/types"
@@ -44,6 +45,11 @@ func (s *MessageService) Forward(ctx context.Context, req *ForwardMessageReq) (*
 		return nil, fmt.Errorf("source message content does not implement ContentType")
 	}
 
+	contentBytes, err := json.Marshal(content)
+	if err != nil {
+		return nil, fmt.Errorf("marshal content: %w", err)
+	}
+
 	// 4. 逐会话转发
 	resp := &ForwardMessageResp{
 		SrcMsgID: req.SrcMsgID,
@@ -56,7 +62,7 @@ func (s *MessageService) Forward(ctx context.Context, req *ForwardMessageReq) (*
 			SenderID:   req.SenderID,
 			SenderName: req.SenderName,
 			MsgType:    srcMsg.MsgType,
-			Content:    content,
+			Content:    contentBytes,
 			ClientTime: srcMsg.ClientTime,
 			TargetUIDs: req.TargetUIDs,
 		}

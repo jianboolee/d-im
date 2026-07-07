@@ -233,6 +233,12 @@ export enum MessageType {
     has_more: boolean;
   }
 
+  export interface SendMessageAck {
+    status: 'accepted';
+    chat_id: string;
+    client_message_id?: string;
+  }
+
   export interface ConversationSettingsPatch {
     pinned?: boolean;
     muted?: boolean;
@@ -588,7 +594,7 @@ export enum MessageType {
       type: MessageType = MessageType.Text,
       content: MessageContent = {},
       clientMessageId?: string
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       const response = await fetch(`${this.baseURL}/api/v1/messages`, {
         method: 'POST',
         headers: {
@@ -608,7 +614,12 @@ export enum MessageType {
       }
 
       const json = await response.json();
-      return normalizeMessage(unwrapApiResponse<Record<string, unknown>>(json));
+      const data = unwrapApiResponse<Record<string, unknown>>(json);
+      return {
+        status: 'accepted',
+        chat_id: String(data.chat_id ?? chatId),
+        client_message_id: data.client_message_id == null ? clientMessageId : String(data.client_message_id),
+      };
     }
   
     async getChatMessagePage(chatId: string, params: MessageQueryParams = {}): Promise<MessagePage> {
@@ -1033,7 +1044,7 @@ export enum MessageType {
     /**
      * 发送文本消息的快捷方法
      */
-    async sendTextMessage(chatId: string, content: string): Promise<Message> {
+    async sendTextMessage(chatId: string, content: string): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Text, { text: content });
     }
   
@@ -1044,7 +1055,7 @@ export enum MessageType {
     chatId: string,
       url: string,
       meta?: Record<string, string>
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Image, {
         url,
         width: meta?.width ? Number(meta.width) : undefined,
@@ -1061,7 +1072,7 @@ export enum MessageType {
     chatId: string,
       url: string,
       meta?: Record<string, string>
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Video, {
         url,
         width: meta?.width ? Number(meta.width) : undefined,
@@ -1079,7 +1090,7 @@ export enum MessageType {
     chatId: string,
       url: string,
       meta?: Record<string, string>
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Voice, {
         url,
         duration: meta?.duration ? Number(meta.duration) : undefined,
@@ -1098,7 +1109,7 @@ export enum MessageType {
       url?: string,
       imageUrl?: string,
       priceText?: string
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Card, {
         title,
         description,
@@ -1117,7 +1128,7 @@ export enum MessageType {
       url: string,
       description?: string,
       imageUrl?: string
-    ): Promise<Message> {
+    ): Promise<SendMessageAck> {
       return this.sendMessage(chatId, MessageType.Link, {
         title,
         description,
