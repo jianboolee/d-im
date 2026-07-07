@@ -72,9 +72,64 @@ func TestGenerateBuildsGridAvatar(t *testing.T) {
 	if got := img.Bounds(); got != image.Rect(0, 0, 256, 256) {
 		t.Fatalf("unexpected bounds: %v", got)
 	}
-	if img.At(20, 20) == img.At(20, 60) {
+	firstRect := layoutRects(5, 256)[0]
+	center := image.Pt((firstRect.Min.X+firstRect.Max.X)/2, (firstRect.Min.Y+firstRect.Max.Y)/2)
+	if img.At(20, 20) == img.At(center.X, center.Y) {
 		t.Fatalf("expected grid cells to differ from background")
 	}
+}
+
+func TestLayoutRectsUsesBalancedRows(t *testing.T) {
+	tests := []struct {
+		name     string
+		count    int
+		rowSizes []int
+	}{
+		{name: "one", count: 1, rowSizes: []int{1}},
+		{name: "three", count: 3, rowSizes: []int{1, 2}},
+		{name: "five", count: 5, rowSizes: []int{2, 3}},
+		{name: "seven", count: 7, rowSizes: []int{1, 3, 3}},
+		{name: "eight", count: 8, rowSizes: []int{2, 3, 3}},
+		{name: "nine", count: 9, rowSizes: []int{3, 3, 3}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rects := layoutRects(tt.count, 256)
+			if len(rects) != tt.count {
+				t.Fatalf("expected %d rects, got %d", tt.count, len(rects))
+			}
+
+			rows := groupRectsByY(rects)
+			if len(rows) != len(tt.rowSizes) {
+				t.Fatalf("expected %d rows, got %d", len(tt.rowSizes), len(rows))
+			}
+			for i, expected := range tt.rowSizes {
+				if len(rows[i]) != expected {
+					t.Fatalf("row %d expected %d rects, got %d", i, expected, len(rows[i]))
+				}
+			}
+
+			firstRow := rows[0]
+			left := firstRow[0].Min.X
+			right := firstRow[len(firstRow)-1].Max.X
+			if left != 256-right {
+				t.Fatalf("first row is not centered: left=%d right_space=%d", left, 256-right)
+			}
+		})
+	}
+}
+
+func groupRectsByY(rects []image.Rectangle) [][]image.Rectangle {
+	rows := make([][]image.Rectangle, 0)
+	for _, rect := range rects {
+		if len(rows) == 0 || rows[len(rows)-1][0].Min.Y != rect.Min.Y {
+			rows = append(rows, []image.Rectangle{rect})
+			continue
+		}
+		rows[len(rows)-1] = append(rows[len(rows)-1], rect)
+	}
+	return rows
 }
 
 func TestGenerateAndStoreWritesPNG(t *testing.T) {

@@ -25,7 +25,6 @@ import (
 
 const (
 	defaultSize = 256
-	defaultGap  = 6
 )
 
 type UserReader interface {
@@ -83,29 +82,16 @@ func (g *Generator) GenerateAndStore(ctx context.Context, chatID string, memberU
 
 func (g *Generator) Generate(ctx context.Context, chatID string, memberUIDs []string) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, defaultSize, defaultSize))
-	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{R: 244, G: 246, B: 248, A: 255}), image.Point{}, draw.Src)
+	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{R: 245, G: 246, B: 248, A: 255}), image.Point{}, draw.Src)
 
 	items := firstNonEmpty(memberUIDs, 9)
 	if len(items) == 0 {
 		items = []string{chatID}
 	}
 
-	cols := gridColumns(len(items))
-	rows := (len(items) + cols - 1) / cols
-	cellSize := (defaultSize - defaultGap*(cols+1)) / cols
-	totalHeight := rows*cellSize + (rows+1)*defaultGap
-	startY := (defaultSize - totalHeight) / 2
-	if startY < defaultGap {
-		startY = defaultGap
-	}
-
+	rects := layoutRects(len(items), defaultSize)
 	for i, uid := range items {
-		colIndex := i % cols
-		rowIndex := i / cols
-		x := defaultGap + colIndex*(cellSize+defaultGap)
-		y := startY + defaultGap + rowIndex*(cellSize+defaultGap)
-		rect := image.Rect(x, y, x+cellSize, y+cellSize)
-
+		rect := rects[i]
 		src := g.loadUserAvatar(ctx, uid)
 		if src == nil {
 			fillRect(dst, rect, fallbackColor(uid))
@@ -223,15 +209,50 @@ func firstNonEmpty(items []string, limit int) []string {
 	return result
 }
 
-func gridColumns(n int) int {
-	switch {
-	case n <= 1:
-		return 1
-	case n <= 4:
-		return 2
-	default:
-		return 3
+func layoutRects(count, canvas int) []image.Rectangle {
+	if count <= 0 {
+		return nil
 	}
+	if count > 9 {
+		count = 9
+	}
+
+	switch count {
+	case 1:
+		return buildRows(canvas, 180, 0, []int{1})
+	case 2:
+		return buildRows(canvas, 112, 8, []int{2})
+	case 3:
+		return buildRows(canvas, 76, 8, []int{1, 2})
+	case 4:
+		return buildRows(canvas, 112, 8, []int{2, 2})
+	case 5:
+		return buildRows(canvas, 76, 6, []int{2, 3})
+	case 6:
+		return buildRows(canvas, 76, 6, []int{3, 3})
+	case 7:
+		return buildRows(canvas, 72, 6, []int{1, 3, 3})
+	case 8:
+		return buildRows(canvas, 72, 6, []int{2, 3, 3})
+	default:
+		return buildRows(canvas, 72, 6, []int{3, 3, 3})
+	}
+}
+
+func buildRows(canvas, cellSize, gap int, rows []int) []image.Rectangle {
+	rects := make([]image.Rectangle, 0, 9)
+	totalHeight := len(rows)*cellSize + (len(rows)-1)*gap
+	y := (canvas - totalHeight) / 2
+	for _, cols := range rows {
+		totalWidth := cols*cellSize + (cols-1)*gap
+		x := (canvas - totalWidth) / 2
+		for i := 0; i < cols; i++ {
+			rects = append(rects, image.Rect(x, y, x+cellSize, y+cellSize))
+			x += cellSize + gap
+		}
+		y += cellSize + gap
+	}
+	return rects
 }
 
 func fillRect(dst draw.Image, rect image.Rectangle, c color.Color) {
