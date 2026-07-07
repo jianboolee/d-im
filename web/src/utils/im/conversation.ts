@@ -65,7 +65,9 @@ export function getUnreadCount(conversation: Conversation, currentUserId: string
   if (conversation.unread_count != null) {
     return normalizeUnreadCount(conversation.unread_count)
   }
-  return hasUnreadConversation(conversation) ? 1 : 0
+  const lastSequence = conversation.last_message?.sequence ?? 0
+  const lastReadSeq = conversation.last_read_sequence ?? 0
+  return normalizeUnreadCount(lastSequence - lastReadSeq)
 }
 
 export function hasUnreadConversation(conversation: Conversation): boolean {

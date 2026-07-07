@@ -16,8 +16,8 @@ type Group struct {
 	Description string `bson:"description" json:"description"` // 群简介
 
 	// 群主和管理员
-	OwnerUID string   `bson:"owner_uid" json:"owner_uid"` // 群主
-	Admins   []string `bson:"admins" json:"admins"`       // 管理员列表
+	OwnerUID string   `bson:"owner_uid" json:"owner_uid"`               // 群主
+	Admins   []string `bson:"admins,omitempty" json:"admins,omitempty"` // 兼容字段，角色以 GroupMember.Role 为准
 
 	// 成员信息
 	MemberCount int `bson:"member_count" json:"member_count"` // 成员数量
@@ -67,8 +67,9 @@ const (
 type GroupMember struct {
 	ID primitive.ObjectID `bson:"_id,omitempty"`
 
-	ChatID string `bson:"chat_id" json:"chat_id"` // 群ID
-	UID    string `bson:"uid" json:"uid"`         // 用户ID
+	ChatID    string `bson:"chat_id" json:"chat_id"` // 群ID
+	UID       string `bson:"uid" json:"uid"`         // 用户ID
+	InvitedBy string `bson:"invited_by,omitempty" json:"invited_by,omitempty"`
 
 	// 角色
 	Role MemberRole `bson:"role" json:"role"` // owner/admin/member
@@ -94,3 +95,11 @@ const (
 	MemberRoleAdmin  MemberRole = "admin"  // 管理员
 	MemberRoleMember MemberRole = "member" // 普通成员
 )
+
+// DefaultGroupSettings 返回新群默认权限：公开、可邀请。
+func DefaultGroupSettings() GroupSettings {
+	return GroupSettings{
+		JoinMethod: JoinMethodInvite,
+		IsPublic:   true,
+	}
+}

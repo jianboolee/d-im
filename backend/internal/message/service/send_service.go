@@ -116,10 +116,21 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		clientTime = now
 	}
 	targetUIDs := req.TargetUIDs
-	if len(targetUIDs) == 0 && s.chatColl != nil {
-		members, err := model.GetChatMembers(ctx, s.chatColl, req.ChatID)
-		if err != nil {
-			return nil, fmt.Errorf("get chat members: %w", err)
+	if len(targetUIDs) == 0 {
+		var members []string
+		if req.ChatType == types.ChatTypeGroup {
+			if s.groups == nil {
+				return nil, fmt.Errorf("group reader is required")
+			}
+			members, err = s.groups.GetMemberUIDs(ctx, req.ChatID)
+			if err != nil {
+				return nil, fmt.Errorf("get group members: %w", err)
+			}
+		} else if s.chatColl != nil {
+			members, err = model.GetChatMembers(ctx, s.chatColl, req.ChatID)
+			if err != nil {
+				return nil, fmt.Errorf("get chat members: %w", err)
+			}
 		}
 		targetUIDs = excludeUID(members, req.SenderID)
 	}
@@ -206,43 +217,22 @@ func (s *MessageService) checkSendPermission(ctx context.Context, req *SendMessa
 	if err != nil {
 		return err
 	}
-	if chat.Status == model.GroupStatusDismissed {
-		return fmt.Errorf("%w: chat dismissed", ErrForbidden)
-	}
 	if req.ChatType == types.ChatTypeGroup || chat.ChatType == types.ChatTypeGroup {
-		if !containsUID(chat.Members, req.SenderID) {
-			return fmt.Errorf("%w: sender is not group member", ErrForbidden)
+		if s.groups == nil {
+			return fmt.Errorf("group reader is required")
 		}
-		if isPrivilegedGroupMember(chat, req.SenderID) {
-			return nil
+		allowed, reason, err := s.groups.CheckPermission(ctx, req.ChatID, req.SenderID, "send_message")
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return fmt.Errorf("%w: sender is not group member", ErrForbidden)
+			}
+			return err
 		}
-		if chat.Settings.IsMutedAll {
-			return fmt.Errorf("%w: group muted all", ErrForbidden)
-		}
-		if containsUID(chat.Settings.MutedMembers, req.SenderID) {
-			return fmt.Errorf("%w: sender muted", ErrForbidden)
+		if !allowed {
+			return fmt.Errorf("%w: %s", ErrForbidden, reason)
 		}
 	}
 	return nil
-}
-
-func isPrivilegedGroupMember(chat *model.Chat, uid string) bool {
-	if chat == nil || uid == "" {
-		return false
-	}
-	if chat.OwnerUID == uid {
-		return true
-	}
-	return containsUID(chat.Admins, uid)
-}
-
-func containsUID(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMessageReq) (*SendMessageResp, error) {

@@ -50,24 +50,28 @@ func (r *SingleRouter) Route(chatID string, fromUID string) (*RouteResult, error
 
 // GroupRouter 群聊路由策略
 type GroupRouter struct {
-	chatColl *mongo.Collection
+	groups groupMemberReader
+}
+
+type groupMemberReader interface {
+	GetMemberUIDs(ctx context.Context, chatID string) ([]string, error)
 }
 
 // NewGroupRouter 创建群聊路由器
-func NewGroupRouter(chatColl *mongo.Collection) *GroupRouter {
-	return &GroupRouter{chatColl: chatColl}
+func NewGroupRouter(groups groupMemberReader) *GroupRouter {
+	return &GroupRouter{groups: groups}
 }
 
 // Route 群聊路由：需要查询群成员列表，排除发送者
 func (r *GroupRouter) Route(chatID string, fromUID string) (*RouteResult, error) {
-	if r.chatColl == nil {
+	if r.groups == nil {
 		return &RouteResult{
 			ChatID:   chatID,
 			ChatType: types.ChatTypeGroup,
 		}, nil
 	}
 
-	members, err := model.GetChatMembers(context.Background(), r.chatColl, chatID)
+	members, err := r.groups.GetMemberUIDs(context.Background(), chatID)
 	if err != nil {
 		return nil, fmt.Errorf("get group members: %w", err)
 	}

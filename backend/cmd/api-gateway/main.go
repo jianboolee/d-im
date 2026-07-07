@@ -16,6 +16,7 @@ import (
 	"d-im/internal/gateway/handler"
 	"d-im/internal/gateway/router"
 	groupAvatar "d-im/internal/group/avatar"
+	groupRepo "d-im/internal/group/repository"
 	groupSvc "d-im/internal/group/service"
 	mediaSvc "d-im/internal/media/service"
 	mediaStorage "d-im/internal/media/storage"
@@ -75,7 +76,11 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db)
 	chatColl := model.ChatCollection(db)
+	gRepo := groupRepo.NewGroupRepo(db)
+	mRepo := groupRepo.NewMemberRepo(db)
+	groupService := groupSvc.NewGroupService(chatColl, gRepo, mRepo, convMgr)
 	msgSvc := messageSvc.NewMessageService(msgRepo, chatColl, convMgr, natsPub)
+	msgSvc.SetGroupReader(groupService)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
 	if err != nil {
 		log.Fatalf("media storage: %v", err)
@@ -86,8 +91,7 @@ func main() {
 	uRepo := userRepo.NewUserRepo(db)
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo)
-	convHandler := handler.NewConversationHandler(conversationSvc, chatColl, uRepo)
-	groupService := groupSvc.NewGroupService(chatColl, convMgr)
+	convHandler := handler.NewConversationHandler(conversationSvc, chatColl, groupService, uRepo)
 	groupService.SetAvatarGenerator(groupAvatar.NewGenerator(store, uRepo))
 	groupHandler := handler.NewGroupHandler(groupService, conversationSvc, msgSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)

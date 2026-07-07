@@ -6,5 +6,7 @@ const (
 	CollectionConversations = "conversations"
 	CollectionUserMailbox   = "user_mailbox"
 	CollectionChats         = "chats"
+	CollectionGroups        = "groups"
+	CollectionGroupMembers  = "group_members"
 	CollectionTemplates     = "message_templates"
 )

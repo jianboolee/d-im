@@ -17,25 +17,16 @@ import (
 
 // Chat 会话实体 - 物理存在的会话
 type Chat struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	ChatID       string             `bson:"chat_id" json:"chat_id"`
-	ChatType     types.ChatType     `bson:"chat_type" json:"chat_type"`
-	SingleKey    string             `bson:"single_key,omitempty" json:"single_key,omitempty"`
-	Name         string             `bson:"name,omitempty" json:"name,omitempty"`
-	Avatar       string             `bson:"avatar,omitempty" json:"avatar,omitempty"`
-	Description  string             `bson:"description,omitempty" json:"description,omitempty"`
-	OwnerUID     string             `bson:"owner_uid,omitempty" json:"owner_uid,omitempty"`
-	Admins       []string           `bson:"admins,omitempty" json:"admins,omitempty"`
-	Members      []string           `bson:"members,omitempty" json:"members,omitempty"`
-	MemberCount  int                `bson:"member_count" json:"member_count"`
-	MaxMembers   int                `bson:"max_members,omitempty" json:"max_members,omitempty"`
-	Settings     GroupSettings      `bson:"settings,omitempty" json:"settings,omitempty"`
-	Announcement string             `bson:"announcement,omitempty" json:"announcement,omitempty"`
-	Status       GroupStatus        `bson:"status,omitempty" json:"status,omitempty"`
-	LastSeq      int64              `bson:"last_seq" json:"last_seq"`
-	CreatedBy    string             `bson:"created_by" json:"created_by"`
-	CreatedAt    time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt    time.Time          `bson:"updated_at" json:"updated_at"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	ChatID      string             `bson:"chat_id" json:"chat_id"`
+	ChatType    types.ChatType     `bson:"chat_type" json:"chat_type"`
+	SingleKey   string             `bson:"single_key,omitempty" json:"single_key,omitempty"`
+	Members     []string           `bson:"members,omitempty" json:"members,omitempty"`
+	MemberCount int                `bson:"member_count" json:"member_count"`
+	LastSeq     int64              `bson:"last_seq" json:"last_seq"`
+	CreatedBy   string             `bson:"created_by" json:"created_by"`
+	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
 }
 
 // ChatCollection 返回 chats 集合。
@@ -92,29 +83,15 @@ func CreateOrGetSingleChat(ctx context.Context, coll *mongo.Collection, uid1, ui
 	return &chat, nil
 }
 
-// CreateGroupChat 创建群聊
-func CreateGroupChat(ctx context.Context, coll *mongo.Collection, name string, ownerUID string, memberUIDs []string) (*Chat, error) {
+// CreateGroupChat 创建群聊对应的消息会话实体。
+func CreateGroupChat(ctx context.Context, coll *mongo.Collection, creatorUID string) (*Chat, error) {
 	chatID := GenerateChatID()
-
-	allMembers := append([]string{ownerUID}, memberUIDs...)
-	allMembers = uniqueStrings(allMembers)
-
 	now := time.Now()
 	chat := &Chat{
-		ChatID:      chatID,
-		ChatType:    types.ChatTypeGroup,
-		Name:        name,
-		OwnerUID:    ownerUID,
-		Members:     allMembers,
-		MemberCount: len(allMembers),
-		MaxMembers:  500,
-		Settings: GroupSettings{
-			JoinMethod: JoinMethodInvite,
-			IsPublic:   false,
-		},
-		Status:    GroupStatusActive,
+		ChatID:    chatID,
+		ChatType:  types.ChatTypeGroup,
 		LastSeq:   0,
-		CreatedBy: ownerUID,
+		CreatedBy: creatorUID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -123,170 +100,10 @@ func CreateGroupChat(ctx context.Context, coll *mongo.Collection, name string, o
 	return chat, err
 }
 
-// AddChatMember 添加群成员
-func AddChatMember(ctx context.Context, coll *mongo.Collection, chatID string, uid string) error {
-	filter := bson.M{
-		"chat_id":   chatID,
-		"chat_type": types.ChatTypeGroup,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-		"members": bson.M{"$ne": uid},
-	}
-	update := bson.M{
-		"$addToSet": bson.M{"members": uid},
-		"$inc":      bson.M{"member_count": 1},
-		"$set":      bson.M{"updated_at": time.Now()},
-	}
-	_, err := coll.UpdateOne(ctx, filter, update)
-	return err
-}
-
-// RemoveChatMember 移除群成员
-func RemoveChatMember(ctx context.Context, coll *mongo.Collection, chatID string, uid string) error {
-	filter := bson.M{
-		"chat_id":   chatID,
-		"chat_type": types.ChatTypeGroup,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-		"members": uid,
-	}
-	update := bson.M{
-		"$pull": bson.M{"members": uid},
-		"$inc":  bson.M{"member_count": -1},
-		"$set":  bson.M{"updated_at": time.Now()},
-	}
-	_, err := coll.UpdateOne(ctx, filter, update)
-	return err
-}
-
-// UpdateGroupChatFields 修改群资料。
-func UpdateGroupChatFields(ctx context.Context, coll *mongo.Collection, chatID string, fields bson.M) (*Chat, error) {
-	set := bson.M{"updated_at": time.Now()}
-	for key, value := range fields {
-		set[key] = value
-	}
-	update := bson.M{"$set": set}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-
-	var chat Chat
-	err := coll.FindOneAndUpdate(ctx, bson.M{
-		"chat_id":   chatID,
-		"chat_type": types.ChatTypeGroup,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-	}, update, opts).Decode(&chat)
-	if err != nil {
-		return nil, err
-	}
-	return &chat, nil
-}
-
-// UpdateGroupChatName 修改群名称。
-func UpdateGroupChatName(ctx context.Context, coll *mongo.Collection, chatID string, name string) (*Chat, error) {
-	return UpdateGroupChatFields(ctx, coll, chatID, bson.M{"name": name})
-}
-
-// UpdateGroupChatAvatarIfEmpty 仅在群头像仍为空时回写头像。
-func UpdateGroupChatAvatarIfEmpty(ctx context.Context, coll *mongo.Collection, chatID string, avatar string) (*Chat, error) {
-	update := bson.M{
-		"$set": bson.M{
-			"avatar":     avatar,
-			"updated_at": time.Now(),
-		},
-	}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-
-	var chat Chat
-	err := coll.FindOneAndUpdate(ctx, bson.M{
-		"chat_id":   chatID,
-		"chat_type": types.ChatTypeGroup,
-		"$or": bson.A{
-			bson.M{"avatar": ""},
-			bson.M{"avatar": bson.M{"$exists": false}},
-		},
-		"status": bson.M{"$ne": GroupStatusDismissed},
-	}, update, opts).Decode(&chat)
-	if err != nil {
-		return nil, err
-	}
-	return &chat, nil
-}
-
-// DismissGroupChat 解散群聊。
-func DismissGroupChat(ctx context.Context, coll *mongo.Collection, chatID string) (*Chat, error) {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     GroupStatusDismissed,
-			"updated_at": time.Now(),
-		},
-	}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-
-	var chat Chat
-	err := coll.FindOneAndUpdate(ctx, bson.M{
-		"chat_id":   chatID,
-		"chat_type": types.ChatTypeGroup,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-	}, update, opts).Decode(&chat)
-	if err != nil {
-		return nil, err
-	}
-	return &chat, nil
-}
-
-// ListGroupChatsByMember 查询用户加入的群聊列表。
-func ListGroupChatsByMember(ctx context.Context, coll *mongo.Collection, uid string, limit, offset int64) ([]*Chat, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	filter := bson.M{
-		"chat_type": types.ChatTypeGroup,
-		"members":   uid,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-	}
-	opts := options.Find().
-		SetSort(bson.D{{Key: "updated_at", Value: -1}, {Key: "chat_id", Value: 1}}).
-		SetLimit(limit).
-		SetSkip(offset)
-
-	cursor, err := coll.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var chats []*Chat
-	if err := cursor.All(ctx, &chats); err != nil {
-		return nil, err
-	}
-	return chats, nil
-}
-
 // GetChatMembers 查询群成员列表
 func GetChatMembers(ctx context.Context, coll *mongo.Collection, chatID string) ([]string, error) {
 	var chat Chat
-	err := coll.FindOne(ctx, bson.M{
-		"chat_id": chatID,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-	}).Decode(&chat)
+	err := coll.FindOne(ctx, bson.M{"chat_id": chatID}).Decode(&chat)
 	if err != nil {
 		return nil, err
 	}
@@ -313,13 +130,7 @@ func NextChatMessageSeq(ctx context.Context, coll *mongo.Collection, chatID stri
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 
 	var chat Chat
-	err := coll.FindOneAndUpdate(ctx, bson.M{
-		"chat_id": chatID,
-		"$or": bson.A{
-			bson.M{"status": GroupStatusActive},
-			bson.M{"status": bson.M{"$exists": false}},
-		},
-	}, update, opts).Decode(&chat)
+	err := coll.FindOneAndUpdate(ctx, bson.M{"chat_id": chatID}, update, opts).Decode(&chat)
 	if err != nil {
 		return 0, err
 	}

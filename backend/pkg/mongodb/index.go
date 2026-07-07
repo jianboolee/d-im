@@ -173,6 +173,51 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 		return err
 	}
 
+	groupIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "chat_id", Value: 1}},
+			Options: options.Index().SetName("idx_group_chat_id").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "status", Value: 1},
+				{Key: "settings.is_public", Value: 1},
+				{Key: "updated_at", Value: -1},
+			},
+			Options: options.Index().SetName("idx_group_public_status_updated"),
+		},
+	}
+	if _, err := db.Collection(CollectionGroups).Indexes().CreateMany(ctx, groupIndexes); err != nil {
+		return err
+	}
+
+	groupMemberIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "uid", Value: 1},
+			},
+			Options: options.Index().SetName("idx_group_member_unique").SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "uid", Value: 1},
+				{Key: "joined_at", Value: -1},
+			},
+			Options: options.Index().SetName("idx_group_member_uid_joined"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "chat_id", Value: 1},
+				{Key: "joined_at", Value: 1},
+			},
+			Options: options.Index().SetName("idx_group_member_chat_joined"),
+		},
+	}
+	if _, err := db.Collection(CollectionGroupMembers).Indexes().CreateMany(ctx, groupMemberIndexes); err != nil {
+		return err
+	}
+
 	return nil
 }
 

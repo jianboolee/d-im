@@ -21,12 +21,18 @@ import (
 type ConversationHandler struct {
 	convSvc  *service.ConversationService
 	chatColl *mongo.Collection
+	groups   conversationGroupReader
 	users    userReader
 }
 
+type conversationGroupReader interface {
+	GetGroup(ctx context.Context, chatID string) (*model.Group, error)
+	GetMemberUIDs(ctx context.Context, chatID string) ([]string, error)
+}
+
 // NewConversationHandler 创建会话处理器
-func NewConversationHandler(convSvc *service.ConversationService, chatColl *mongo.Collection, users userReader) *ConversationHandler {
-	return &ConversationHandler{convSvc: convSvc, chatColl: chatColl, users: users}
+func NewConversationHandler(convSvc *service.ConversationService, chatColl *mongo.Collection, groups conversationGroupReader, users userReader) *ConversationHandler {
+	return &ConversationHandler{convSvc: convSvc, chatColl: chatColl, groups: groups, users: users}
 }
 
 // ListConversations 获取用户会话列表
@@ -252,20 +258,27 @@ func (h *ConversationHandler) conversationDTO(ctx context.Context, conv *model.C
 
 	if h.chatColl != nil {
 		if chat, err := model.FindChatByID(ctx, h.chatColl, conv.ChatID); err == nil {
-			participants = append(participants, chat.Members...)
+			if conv.ChatType == types.ChatTypeSingle {
+				participants = append(participants, chat.Members...)
+			}
+		}
+	}
+	if conv.ChatType == types.ChatTypeGroup && h.groups != nil {
+		if group, err := h.groups.GetGroup(ctx, conv.ChatID); err == nil {
+			groupID = group.ChatID
+			groupInfo = &groupSummaryDTO{
+				ID:          group.ChatID,
+				Name:        group.Name,
+				AvatarURL:   group.Avatar,
+				MemberCount: group.MemberCount,
+			}
 			if title == "" {
-				title = chat.Name
+				title = group.Name
 			}
-			avatar = chat.Avatar
-			if conv.ChatType == types.ChatTypeGroup {
-				groupID = chat.ChatID
-				groupInfo = &groupSummaryDTO{
-					ID:          chat.ChatID,
-					Name:        chat.Name,
-					AvatarURL:   chat.Avatar,
-					MemberCount: chat.MemberCount,
-				}
-			}
+			avatar = group.Avatar
+		}
+		if memberUIDs, err := h.groups.GetMemberUIDs(ctx, conv.ChatID); err == nil {
+			participants = append(participants, memberUIDs...)
 		}
 	}
 

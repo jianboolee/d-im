@@ -18,8 +18,14 @@ var ErrForbidden = errors.New("forbidden")
 type MessageService struct {
 	repo     *repository.MessageRepo
 	chatColl *mongo.Collection
+	groups   messageGroupReader
 	convMgr  *model.ConversationManager
 	natsPub  *natsq.Publisher
+}
+
+type messageGroupReader interface {
+	GetMemberUIDs(ctx context.Context, chatID string) ([]string, error)
+	CheckPermission(ctx context.Context, chatID, uid, action string) (bool, string, error)
 }
 
 // NewMessageService 创建消息服务
@@ -30,6 +36,10 @@ func NewMessageService(repo *repository.MessageRepo, chatColl *mongo.Collection,
 		convMgr:  convMgr,
 		natsPub:  natsPub,
 	}
+}
+
+func (s *MessageService) SetGroupReader(groups messageGroupReader) {
+	s.groups = groups
 }
 
 // GenerateMsgID 生成消息ID（UUID v7）。

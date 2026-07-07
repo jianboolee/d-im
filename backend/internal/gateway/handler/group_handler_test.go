@@ -17,57 +17,56 @@ import (
 )
 
 type fakeGroupOperator struct {
-	chat         *model.Chat
+	group        *model.Group
+	members      []*model.GroupMember
 	createdName  string
 	createdOwner string
 	createdUsers []string
 	addedUsers   []string
 }
 
-func (f *fakeGroupOperator) CreateGroup(_ context.Context, name, ownerUID string, memberUIDs []string) (*model.Chat, error) {
+func (f *fakeGroupOperator) CreateGroup(_ context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	f.createdName = name
 	f.createdOwner = ownerUID
 	f.createdUsers = append([]string{}, memberUIDs...)
-	return f.chat, nil
+	return f.group, nil
 }
 
-func (f *fakeGroupOperator) GetGroupForMember(_ context.Context, _ string, _ string) (*model.Chat, error) {
-	return f.chat, nil
+func (f *fakeGroupOperator) GetGroupForMember(_ context.Context, _ string, _ string) (*model.Group, error) {
+	return f.group, nil
 }
 
-func (f *fakeGroupOperator) ListGroupsForMember(_ context.Context, _ string, _ int64, _ int64) ([]*model.Chat, error) {
-	return []*model.Chat{f.chat}, nil
+func (f *fakeGroupOperator) ListGroupsForMember(_ context.Context, _ string, _ int64, _ int64) ([]*model.Group, error) {
+	return []*model.Group{f.group}, nil
 }
 
-func (f *fakeGroupOperator) JoinGroup(_ context.Context, _ string, uid string) (*model.Chat, error) {
-	updated := *f.chat
-	updated.Members = append(append([]string{}, f.chat.Members...), uid)
-	updated.MemberCount = len(updated.Members)
+func (f *fakeGroupOperator) JoinGroup(_ context.Context, _ string, uid string) (*model.Group, error) {
+	updated := *f.group
+	updated.MemberCount++
+	f.members = append(f.members, &model.GroupMember{ChatID: updated.ChatID, UID: uid, Role: model.MemberRoleMember})
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) AddMembers(_ context.Context, _ string, _ string, uidList []string) (*model.Chat, error) {
+func (f *fakeGroupOperator) AddMembers(_ context.Context, _ string, _ string, uidList []string) (*model.Group, []string, error) {
 	f.addedUsers = append([]string{}, uidList...)
-	updated := *f.chat
-	updated.Members = append(append([]string{}, f.chat.Members...), uidList...)
-	updated.MemberCount = len(updated.Members)
-	return &updated, nil
+	updated := *f.group
+	updated.MemberCount += len(uidList)
+	for _, uid := range uidList {
+		f.members = append(f.members, &model.GroupMember{ChatID: updated.ChatID, UID: uid, Role: model.MemberRoleMember})
+	}
+	return &updated, append([]string{}, uidList...), nil
 }
 
-func (f *fakeGroupOperator) RemoveMember(_ context.Context, _ string, _ string) error {
-	return nil
+func (f *fakeGroupOperator) LeaveGroup(_ context.Context, _ string, _ string) (*model.Group, error) {
+	return f.group, nil
 }
 
-func (f *fakeGroupOperator) LeaveGroup(_ context.Context, _ string, _ string) (*model.Chat, error) {
-	return f.chat, nil
+func (f *fakeGroupOperator) KickMember(_ context.Context, _ string, _ string, _ string) (*model.Group, error) {
+	return f.group, nil
 }
 
-func (f *fakeGroupOperator) KickMember(_ context.Context, _ string, _ string, _ string) (*model.Chat, error) {
-	return f.chat, nil
-}
-
-func (f *fakeGroupOperator) UpdateInfo(_ context.Context, _ string, _ string, info groupSvc.UpdateGroupInfo) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) UpdateInfo(_ context.Context, _ string, _ string, info groupSvc.UpdateGroupInfo) (*model.Group, error) {
+	updated := *f.group
 	if info.Name != nil {
 		updated.Name = *info.Name
 	}
@@ -80,42 +79,46 @@ func (f *fakeGroupOperator) UpdateInfo(_ context.Context, _ string, _ string, in
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) UpdateName(_ context.Context, _ string, _ string, name string) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) UpdateName(_ context.Context, _ string, _ string, name string) (*model.Group, error) {
+	updated := *f.group
 	updated.Name = name
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) UpdateSettings(_ context.Context, _ string, _ string, settings model.GroupSettings) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) UpdateSettings(_ context.Context, _ string, _ string, settings model.GroupSettings) (*model.Group, error) {
+	updated := *f.group
 	updated.Settings = settings
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) SetAnnouncement(_ context.Context, _ string, _ string, announcement string) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) SetAnnouncement(_ context.Context, _ string, _ string, announcement string) (*model.Group, error) {
+	updated := *f.group
 	updated.Announcement = announcement
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) SetMemberRole(_ context.Context, _ string, _ string, targetUID string, role model.MemberRole) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) SetMemberRole(_ context.Context, _ string, _ string, targetUID string, role model.MemberRole) (*model.Group, error) {
+	updated := *f.group
 	if role == model.MemberRoleAdmin {
 		updated.Admins = append(updated.Admins, targetUID)
 	}
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) TransferOwner(_ context.Context, _ string, _ string, targetUID string) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) TransferOwner(_ context.Context, _ string, _ string, targetUID string) (*model.Group, error) {
+	updated := *f.group
 	updated.OwnerUID = targetUID
 	return &updated, nil
 }
 
-func (f *fakeGroupOperator) DismissGroup(_ context.Context, _ string, _ string) (*model.Chat, error) {
-	updated := *f.chat
+func (f *fakeGroupOperator) DismissGroup(_ context.Context, _ string, _ string) (*model.Group, error) {
+	updated := *f.group
 	updated.Status = model.GroupStatusDismissed
 	return &updated, nil
+}
+
+func (f *fakeGroupOperator) ListMembers(_ context.Context, _ string, _ int64, _ int64) ([]*model.GroupMember, error) {
+	return f.members, nil
 }
 
 type fakeConversationByChatReader struct {
@@ -137,15 +140,18 @@ func (f *fakeGroupMessageSender) Send(_ context.Context, req *messageSvc.SendMes
 
 func TestCreateGroupReturnsConversationAndWritesSystemEvent(t *testing.T) {
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	groups := &fakeGroupOperator{chat: &model.Chat{
+	groups := &fakeGroupOperator{group: &model.Group{
+		GroupID:     "chat_group",
 		ChatID:      "chat_group",
-		ChatType:    types.ChatTypeGroup,
 		Name:        "项目群",
 		OwnerUID:    "user_a",
-		Members:     []string{"user_a", "user_b"},
 		MemberCount: 2,
+		Status:      model.GroupStatusActive,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}, members: []*model.GroupMember{
+		{ChatID: "chat_group", UID: "user_a", Role: model.MemberRoleOwner, JoinedAt: now},
+		{ChatID: "chat_group", UID: "user_b", Role: model.MemberRoleMember, JoinedAt: now},
 	}}
 	conv := fakeConversationByChatReader{conv: &model.Conversation{
 		ConversationID: "conv_group",
@@ -189,15 +195,17 @@ func TestCreateGroupReturnsConversationAndWritesSystemEvent(t *testing.T) {
 
 func TestInviteMembersWritesSystemEvent(t *testing.T) {
 	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
-	groups := &fakeGroupOperator{chat: &model.Chat{
+	groups := &fakeGroupOperator{group: &model.Group{
+		GroupID:     "chat_group",
 		ChatID:      "chat_group",
-		ChatType:    types.ChatTypeGroup,
 		Name:        "项目群",
 		OwnerUID:    "user_a",
-		Members:     []string{"user_a"},
 		MemberCount: 1,
+		Status:      model.GroupStatusActive,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}, members: []*model.GroupMember{
+		{ChatID: "chat_group", UID: "user_a", Role: model.MemberRoleOwner, JoinedAt: now},
 	}}
 	conv := fakeConversationByChatReader{conv: &model.Conversation{
 		ConversationID: "conv_group",
