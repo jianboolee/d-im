@@ -16,6 +16,7 @@ export function useConversationList() {
     upsertConversation: store.upsertConversation,
     updateConversationMemberState: store.updateConversationMemberState,
     updateConversationGroupInfo: store.updateConversationGroupInfo,
+    updateConversationGroupInfoByGroupId: store.updateConversationGroupInfoByGroupId,
     removeConversation: store.removeConversation,
     ensureConversationInList: store.ensureConversationInList,
     ensureConversationByChatId: store.ensureConversationByChatId,

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import IMSDK, { type Message, type ConnectionStatus, type MessageHandler, type ConnectionHandler, MessageType } from '@/sdk/im'
+import IMSDK, { type Message, type ConnectionStatus, type MessageHandler, type ConnectionHandler, type GroupUpdateHandler, MessageType } from '@/sdk/im'
 import { getImSdkOptions } from '@/config'
 import { useUserStore } from './user'
 import { usePageNotificationStore } from './pageNotification'
@@ -10,6 +10,7 @@ export const useIMStore = defineStore('im', () => {
     const imSDK = ref<IMSDK | null>(null)
     const isConnected = ref(false)
     const messageHandlers = ref<MessageHandler[]>([])
+    const groupUpdateHandlers = ref<GroupUpdateHandler[]>([])
     const connectionHandlers = ref<ConnectionHandler[]>([])
     const reconnectTimer = ref<ReturnType<typeof setTimeout> | null>(null)
     const heartbeatTimer = ref<ReturnType<typeof setInterval> | null>(null)
@@ -188,6 +189,12 @@ export const useIMStore = defineStore('im', () => {
         imSDK.value.onMessage(handler)
     }
 
+    const addGroupUpdateHandler = (handler: GroupUpdateHandler) => {
+        if (!imSDK.value) return
+        groupUpdateHandlers.value.push(handler)
+        imSDK.value.onGroupUpdate(handler)
+    }
+
     // 移除消息处理器
     const removeMessageHandler = (handler: MessageHandler) => {
         if (!imSDK.value) return
@@ -195,6 +202,15 @@ export const useIMStore = defineStore('im', () => {
         if (index > -1) {
             messageHandlers.value.splice(index, 1)
             imSDK.value.offMessage(handler)
+        }
+    }
+
+    const removeGroupUpdateHandler = (handler: GroupUpdateHandler) => {
+        if (!imSDK.value) return
+        const index = groupUpdateHandlers.value.indexOf(handler)
+        if (index > -1) {
+            groupUpdateHandlers.value.splice(index, 1)
+            imSDK.value.offGroupUpdate(handler)
         }
     }
 
@@ -219,8 +235,10 @@ export const useIMStore = defineStore('im', () => {
     const clearHandlers = () => {
         if (!imSDK.value) return
         messageHandlers.value.forEach(handler => imSDK.value?.offMessage(handler))
+        groupUpdateHandlers.value.forEach(handler => imSDK.value?.offGroupUpdate(handler))
         connectionHandlers.value.forEach(handler => imSDK.value?.offConnection(handler))
         messageHandlers.value = []
+        groupUpdateHandlers.value = []
         connectionHandlers.value = []
     }
 
@@ -250,6 +268,8 @@ export const useIMStore = defineStore('im', () => {
         initSDK,
         addMessageHandler,
         removeMessageHandler,
+        addGroupUpdateHandler,
+        removeGroupUpdateHandler,
         addConnectionHandler,
         removeConnectionHandler,
         closeConnection,

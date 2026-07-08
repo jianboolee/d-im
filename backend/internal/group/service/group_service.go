@@ -394,7 +394,7 @@ func (s *GroupService) KickMember(ctx context.Context, chatID, operatorUID, targ
 }
 
 func (s *GroupService) UpdateInfo(ctx context.Context, chatID, operatorUID string, info UpdateGroupInfo) (*model.Group, error) {
-	_, operator, err := s.requireMember(ctx, chatID, operatorUID)
+	group, operator, err := s.requireMember(ctx, chatID, operatorUID)
 	if err != nil {
 		return nil, err
 	}
@@ -402,12 +402,16 @@ func (s *GroupService) UpdateInfo(ctx context.Context, chatID, operatorUID strin
 		return nil, ErrForbidden
 	}
 	fields := bson.M{}
+	var beforeName string
+	var afterName string
 	if info.Name != nil {
 		name := strings.TrimSpace(*info.Name)
 		if name == "" {
 			return nil, fmt.Errorf("group name is required")
 		}
 		fields["name"] = name
+		beforeName = group.Name
+		afterName = name
 	}
 	if info.Avatar != nil {
 		fields["avatar"] = strings.TrimSpace(*info.Avatar)
@@ -422,11 +426,17 @@ func (s *GroupService) UpdateInfo(ctx context.Context, chatID, operatorUID strin
 	if err != nil {
 		return nil, err
 	}
+	eventType := EventTypeGroupInfoUpdated
+	if info.Name == nil && info.Avatar != nil {
+		eventType = EventTypeAvatarUpdated
+	}
 	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   EventTypeGroupInfoUpdated,
+		EventType:   eventType,
 		OperatorUID: operatorUID,
 		GroupID:     chatID,
 		GroupName:   result.Name,
+		BeforeValue: beforeName,
+		AfterValue:  afterName,
 	})
 	return result, nil
 }

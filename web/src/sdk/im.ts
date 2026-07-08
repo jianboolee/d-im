@@ -110,6 +110,12 @@ export enum MessageType {
     member_count: number;
   }
 
+  export interface GroupUpdateEvent {
+    event: string;
+    group_id: string;
+    group: GroupSummary;
+  }
+
   export interface Group {
     id: string;
     conversation_id: string;
@@ -327,6 +333,33 @@ export enum MessageType {
     }
   }
 
+  function normalizeGroupSummary(raw: unknown, fallbackGroupId = ''): GroupSummary | undefined {
+    if (!raw || typeof raw !== 'object') return undefined
+    const item = raw as Record<string, unknown>
+    const id = String(item.id ?? item.group_id ?? item.chat_id ?? fallbackGroupId)
+    if (!id) return undefined
+    return {
+      id,
+      name: String(item.name ?? ''),
+      avatar_url: item.avatar_url == null && item.avatar == null ? undefined : String(item.avatar_url ?? item.avatar),
+      member_count: Number(item.member_count ?? 0),
+    }
+  }
+
+  function normalizeGroupUpdateEvent(raw: Record<string, unknown>): GroupUpdateEvent | undefined {
+    const data = raw.data && typeof raw.data === 'object'
+      ? raw.data as Record<string, unknown>
+      : raw
+    const groupId = String(data.group_id ?? '')
+    const group = normalizeGroupSummary(data.group, groupId)
+    if (!group) return undefined
+    return {
+      event: String(data.event ?? ''),
+      group_id: groupId || group.id,
+      group,
+    }
+  }
+
   function normalizeConversation(raw: Record<string, unknown>): Conversation {
     const conv = raw as unknown as Conversation
     const id = String(raw.conversation_id ?? raw.id ?? conv.id ?? '')
@@ -345,7 +378,7 @@ export enum MessageType {
       display_name: raw.title == null ? conv.display_name : String(raw.title),
       display_avatar: raw.avatar == null ? conv.display_avatar : String(raw.avatar),
       group_id: raw.group_id == null ? conv.group_id : String(raw.group_id),
-      group_info: ((raw.group_info ?? raw.group) as GroupSummary | undefined) ?? conv.group_info,
+      group_info: normalizeGroupSummary(raw.group_info ?? raw.group) ?? conv.group_info,
       peer_user_info: (raw.peer_user as UserInfo | null | undefined) ?? conv.peer_user_info,
       last_read_sequence: Number(raw.last_read_sequence ?? conv.last_read_sequence ?? 0),
       last_read_at: raw.last_read_at == null ? conv.last_read_at : String(raw.last_read_at),
@@ -402,6 +435,8 @@ export enum MessageType {
   
   // 消息处理器类型
   export type MessageHandler = (message: Message) => void;
+
+  export type GroupUpdateHandler = (event: GroupUpdateEvent) => void;
   
   // 连接状态处理器类型
   export type ConnectionHandler = (status: ConnectionStatus) => void;
@@ -416,6 +451,7 @@ export enum MessageType {
     private token: string;
     private ws: WebSocket | null;
     private messageHandlers: MessageHandler[];
+    private groupUpdateHandlers: GroupUpdateHandler[];
     private connectionHandlers: ConnectionHandler[];
     private heartbeatInterval: number;
     private heartbeatTimer: ReturnType<typeof setInterval> | null;
@@ -435,6 +471,7 @@ export enum MessageType {
       this.token = options.token;
       this.ws = null;
       this.messageHandlers = [];
+      this.groupUpdateHandlers = [];
       this.connectionHandlers = [];
       this.heartbeatInterval = 30000; // 默认30秒发送一次心跳
       this.heartbeatTimer = null;
@@ -506,6 +543,13 @@ export enum MessageType {
               message._ws_preview_image_url = conversation.preview_image_url;
             }
             this._notifyMessageHandlers(message);
+            return;
+          }
+          if (raw?.type === 'group_updated') {
+            const groupEvent = normalizeGroupUpdateEvent(raw as Record<string, unknown>);
+            if (groupEvent) {
+              this._notifyGroupUpdateHandlers(groupEvent);
+            }
             return;
           }
           if (raw?.type === MessageType.Ping) {
@@ -911,6 +955,10 @@ export enum MessageType {
     onMessage(handler: MessageHandler): void {
       this.messageHandlers.push(handler);
     }
+
+    onGroupUpdate(handler: GroupUpdateHandler): void {
+      this.groupUpdateHandlers.push(handler);
+    }
   
     /**
      * 监听连接状态
@@ -926,6 +974,13 @@ export enum MessageType {
       const index = this.messageHandlers.indexOf(handler);
       if (index > -1) {
         this.messageHandlers.splice(index, 1);
+      }
+    }
+
+    offGroupUpdate(handler: GroupUpdateHandler): void {
+      const index = this.groupUpdateHandlers.indexOf(handler);
+      if (index > -1) {
+        this.groupUpdateHandlers.splice(index, 1);
       }
     }
   
@@ -944,6 +999,10 @@ export enum MessageType {
      */
     private _notifyMessageHandlers(message: Message): void {
       this.messageHandlers.forEach(handler => handler(message));
+    }
+
+    private _notifyGroupUpdateHandlers(event: GroupUpdateEvent): void {
+      this.groupUpdateHandlers.forEach(handler => handler(event));
     }
   
     /**

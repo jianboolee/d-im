@@ -139,9 +139,15 @@ func main() {
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo, natsPub)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatR, groupService, uRepo)
 	eventPub := groupSvc.NewEventPublisher(groupAdapter.NewCompositeEventAdapter(natsPub))
+	eventPub.SetUserProfileReader(uRepo)
 	groupService.SetAvatarGenerator(groupAvatar.NewGenerator(store, uRepo))
 	groupService.SetEventPublisher(eventPub)
 	memberService.SetEventPublisher(eventPub)
+	groupPushConsumer := groupAdapter.NewGroupPushConsumer(natsPub, gRepo, mRepo)
+	if err := groupPushConsumer.Start(conn); err != nil {
+		log.Fatalf("[gateway] start group push consumer: %v", err)
+	}
+	defer groupPushConsumer.Stop()
 	groupHandler := handler.NewGroupHandler(groupService, memberService, conversationSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)

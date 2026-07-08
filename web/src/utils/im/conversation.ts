@@ -54,8 +54,10 @@ export function getConversationDisplayName(conversation: Conversation, currentUs
 }
 
 export function getConversationDisplayAvatar(conversation: Conversation): string {
+  if (isGroupConversation(conversation)) {
+    return conversation.display_avatar || conversation.group_info?.avatar_url || ''
+  }
   return conversation.display_avatar
-    || conversation.group_info?.avatar_url
     || conversation.peer_user_info?.avatar
     || ''
 }

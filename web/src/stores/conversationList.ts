@@ -90,6 +90,33 @@ export const useConversationListStore = defineStore('conversationList', () => {
     searchResults.value = sortConversationsByActivity(searchResults.value.map(applyGroupInfo))
   }
 
+  function updateConversationGroupInfoByGroupId(groupId: string, group: NonNullable<Conversation['group_info']>) {
+    const targetGroupId = groupId || group?.id
+    if (!targetGroupId || !group?.id) return
+
+    const applyGroupInfo = (conversation: Conversation) => {
+      const matches = conversation.chat_type === 'group' && (
+        conversation.group_id === targetGroupId
+        || conversation.chat_id === targetGroupId
+        || conversation.group_info?.id === targetGroupId
+      )
+      if (!matches) return conversation
+      return {
+        ...conversation,
+        display_name: group.name || conversation.display_name,
+        display_avatar: group.avatar_url ?? conversation.display_avatar,
+        group_id: targetGroupId,
+        group_info: {
+          ...conversation.group_info,
+          ...group,
+        },
+      }
+    }
+
+    conversations.value = sortConversationsByActivity(conversations.value.map(applyGroupInfo))
+    searchResults.value = sortConversationsByActivity(searchResults.value.map(applyGroupInfo))
+  }
+
   function removeConversation(conversationId: string) {
     if (!conversationId) return
     conversations.value = conversations.value.filter((conversation) => conversation.id !== conversationId)
@@ -454,6 +481,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
     upsertConversation,
     updateConversationMemberState,
     updateConversationGroupInfo,
+    updateConversationGroupInfoByGroupId,
     removeConversation,
     ensureConversationInList,
     ensureConversationByChatId,

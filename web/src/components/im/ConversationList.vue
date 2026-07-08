@@ -81,7 +81,7 @@ import {
   getUnreadCount,
 } from '@/utils/im/conversation'
 import PlaceholderImage from '@/components/common/PlaceholderImage.vue'
-import type { Conversation } from '@/sdk/im'
+import type { Conversation, GroupUpdateEvent } from '@/sdk/im'
 
 const props = withDefaults(
   defineProps<{
@@ -129,6 +129,7 @@ const {
   searchConversations,
   loadMoreSearchConversations,
   handleIncomingMessage,
+  updateConversationGroupInfoByGroupId,
   ensureConversationByChatId,
   requestScrollToConversation,
   pendingScrollRequest,
@@ -249,6 +250,10 @@ const onIncomingMessage = async (message: Parameters<typeof handleIncomingMessag
   mergeConversationUsers(conversations.value)
 }
 
+const onGroupUpdate = (event: GroupUpdateEvent) => {
+  updateConversationGroupInfoByGroupId(event.group_id, event.group)
+}
+
 const refresh = async () => {
   if (isSearching.value) {
     await searchConversations(normalizedSearchKeyword.value)
@@ -283,6 +288,7 @@ const handleScroll = (event: Event) => {
 onMounted(async () => {
   imStore.initSDK()
   imStore.addMessageHandler(onIncomingMessage)
+  imStore.addGroupUpdateHandler(onGroupUpdate)
   if (props.searchMode && !hasSearchKeyword.value) return
   await refresh()
 })
@@ -292,6 +298,7 @@ onUnmounted(() => {
     window.clearTimeout(searchTimer)
   }
   imStore.removeMessageHandler(onIncomingMessage)
+  imStore.removeGroupUpdateHandler(onGroupUpdate)
 })
 
 watch(

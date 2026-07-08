@@ -35,14 +35,14 @@ func NewGroupPushConsumer(pub *natsq.Publisher, groups groupRepo, members member
 
 // Start 订阅 dim.group.* 事件。
 func (c *GroupPushConsumer) Start(conn *nats.Conn) error {
-	sub, err := conn.Subscribe("dim.group.>", func(msg *nats.Msg) {
+	sub, err := conn.QueueSubscribe("dim.group.>", "group-push", func(msg *nats.Msg) {
 		c.handle(msg)
 	})
 	if err != nil {
 		return err
 	}
 	c.sub = sub
-	log.Printf("[group_push_consumer] subscribed to dim.group.>")
+	log.Printf("[group_push_consumer] subscribed to dim.group.> queue=group-push")
 	return nil
 }
 
