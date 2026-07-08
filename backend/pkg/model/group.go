@@ -64,7 +64,7 @@ const (
 // DefaultGroupSettings 返回新群默认设置：仅邀请加入、公开群。
 func DefaultGroupSettings() GroupSettings {
 	return GroupSettings{
-		JoinMethod: JoinMethodInvite,
+		JoinMethod: JoinMethodFree,
 		IsPublic:   true,
 	}
 }

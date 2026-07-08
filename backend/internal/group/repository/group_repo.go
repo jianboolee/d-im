@@ -142,3 +142,19 @@ func (r *GroupRepo) UpdateAvatarIfEmpty(ctx context.Context, chatID, avatar stri
 	}
 	return &group, nil
 }
+
+func (r *GroupRepo) UpdateAvatar(ctx context.Context, chatID, avatar string) (*model.Group, error) {
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	var group model.Group
+	err := r.coll.FindOneAndUpdate(ctx, bson.M{
+		"chat_id": chatID,
+		"status":  model.GroupStatusActive,
+	}, bson.M{"$set": bson.M{
+		"avatar":     avatar,
+		"updated_at": time.Now(),
+	}}, opts).Decode(&group)
+	if err != nil {
+		return nil, err
+	}
+	return &group, nil
+}

@@ -159,7 +159,7 @@ func (s *GroupService) GenerateGroupAvatarAsync(chatID string) {
 			log.Printf("[group] load group for avatar failed: chat_id=%s err=%v", chatID, err)
 			return
 		}
-		if strings.TrimSpace(group.Avatar) != "" {
+		if !shouldUpdateGeneratedAvatar(group.Avatar, group.ChatID) {
 			return
 		}
 		memberUIDs, err := s.members.ListUIDs(ctx, group.ChatID)
@@ -175,8 +175,8 @@ func (s *GroupService) GenerateGroupAvatarAsync(chatID string) {
 		if avatarURL == "" {
 			return
 		}
-		updated, err := s.groups.UpdateAvatarIfEmpty(ctx, group.ChatID, avatarURL)
-		if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		updated, err := s.groups.UpdateAvatar(ctx, group.ChatID, avatarURL)
+		if err != nil {
 			log.Printf("[group] update group avatar failed: chat_id=%s err=%v", chatID, err)
 			return
 		}

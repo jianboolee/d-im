@@ -66,7 +66,7 @@ func (g *Generator) GenerateAndStore(ctx context.Context, chatID string, memberU
 		return "", err
 	}
 
-	key := fmt.Sprintf("im/group-avatars/%s.png", chatID)
+	key := fmt.Sprintf("im/group-avatars/%s/%s.png", chatID, memberSignature(memberUIDs))
 	stored, err := g.store.Put(ctx, storage.Object{
 		Key:         key,
 		Reader:      bytes.NewReader(buf.Bytes()),
@@ -207,6 +207,15 @@ func firstNonEmpty(items []string, limit int) []string {
 		}
 	}
 	return result
+}
+
+func memberSignature(memberUIDs []string) string {
+	hash := fnv.New64a()
+	for _, uid := range firstNonEmpty(memberUIDs, 9) {
+		_, _ = hash.Write([]byte(uid))
+		_, _ = hash.Write([]byte{0})
+	}
+	return fmt.Sprintf("%016x", hash.Sum64())
 }
 
 func layoutRects(count, canvas int) []image.Rectangle {

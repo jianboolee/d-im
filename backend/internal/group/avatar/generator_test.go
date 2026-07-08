@@ -140,10 +140,11 @@ func TestGenerateAndStoreWritesPNG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate and store: %v", err)
 	}
-	if url != "/media/im/group-avatars/chat_group.png" {
+	expectedKey := "im/group-avatars/chat_group/" + memberSignature([]string{"user_a", "user_b"}) + ".png"
+	if url != "/media/"+expectedKey {
 		t.Fatalf("unexpected url: %q", url)
 	}
-	if store.key != "im/group-avatars/chat_group.png" {
+	if store.key != expectedKey {
 		t.Fatalf("unexpected key: %q", store.key)
 	}
 	if store.contentType != "image/png" {
@@ -151,6 +152,35 @@ func TestGenerateAndStoreWritesPNG(t *testing.T) {
 	}
 	if _, err := png.Decode(bytes.NewReader(store.data)); err != nil {
 		t.Fatalf("stored data is not png: %v", err)
+	}
+}
+
+func TestGenerateAndStoreUsesFirstNineMembersInKey(t *testing.T) {
+	store := &fakeStorage{}
+	gen := NewGenerator(store, nil)
+	members := []string{
+		"user_1", "user_2", "user_3", "user_4", "user_5",
+		"user_6", "user_7", "user_8", "user_9", "user_10",
+	}
+
+	firstURL, err := gen.GenerateAndStore(context.Background(), "chat_group", members)
+	if err != nil {
+		t.Fatalf("generate first avatar: %v", err)
+	}
+	secondURL, err := gen.GenerateAndStore(context.Background(), "chat_group", append(members[:9], "user_11"))
+	if err != nil {
+		t.Fatalf("generate second avatar: %v", err)
+	}
+	if firstURL != secondURL {
+		t.Fatalf("expected same url when first nine members do not change: %q != %q", firstURL, secondURL)
+	}
+
+	changedURL, err := gen.GenerateAndStore(context.Background(), "chat_group", append([]string{"user_0"}, members...))
+	if err != nil {
+		t.Fatalf("generate changed avatar: %v", err)
+	}
+	if changedURL == firstURL {
+		t.Fatalf("expected changed url when first nine members change")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/group/repository"
@@ -18,12 +19,13 @@ import (
 
 // MemberService 群成员用例服务。
 type MemberService struct {
-	db             *mongo.Database
-	chatRepo       *chatRepo.ChatRepo
-	groups         *repository.GroupRepo
-	members        *repository.MemberRepo
-	convMgr        *model.ConversationManager
-	eventPublisher *EventPublisher
+	db              *mongo.Database
+	chatRepo        *chatRepo.ChatRepo
+	groups          *repository.GroupRepo
+	members         *repository.MemberRepo
+	convMgr         *model.ConversationManager
+	avatarGenerator groupAvatarGenerator
+	eventPublisher  *EventPublisher
 }
 
 // NewMemberService 创建成员服务。
@@ -42,16 +44,71 @@ func (s *MemberService) SetEventPublisher(publisher *EventPublisher) {
 	s.eventPublisher = publisher
 }
 
+func (s *MemberService) SetAvatarGenerator(generator groupAvatarGenerator) {
+	s.avatarGenerator = generator
+}
+
 func (s *MemberService) publishEvent(ctx context.Context, event GroupSystemEvent) {
 	if s.eventPublisher != nil {
 		s.eventPublisher.Publish(ctx, event)
 	}
 }
 
+func (s *MemberService) maybeGenerateGroupAvatarAsync(chatID string, beforeMemberUIDs []string) {
+	if s == nil || s.avatarGenerator == nil || chatID == "" {
+		return
+	}
+	afterMemberUIDs, err := s.members.ListUIDs(context.Background(), chatID)
+	if err != nil {
+		log.Printf("[group] load members for avatar refresh failed: chat_id=%s err=%v", chatID, err)
+		return
+	}
+	if !avatarAffectingMembersChanged(beforeMemberUIDs, afterMemberUIDs) {
+		return
+	}
+	go func(memberUIDs []string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		group, err := s.groups.FindActiveByChatID(ctx, chatID)
+		if err != nil {
+			log.Printf("[group] load group for avatar refresh failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		if !shouldUpdateGeneratedAvatar(group.Avatar, group.ChatID) {
+			return
+		}
+		avatarURL, err := s.avatarGenerator.GenerateAndStore(ctx, group.ChatID, memberUIDs)
+		if err != nil {
+			log.Printf("[group] refresh group avatar failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		if avatarURL == "" {
+			return
+		}
+		updated, err := s.groups.UpdateAvatar(ctx, group.ChatID, avatarURL)
+		if err != nil {
+			log.Printf("[group] update refreshed group avatar failed: chat_id=%s err=%v", chatID, err)
+			return
+		}
+		s.publishEvent(ctx, GroupSystemEvent{
+			EventType: EventTypeAvatarUpdated,
+			GroupID:   updated.ChatID,
+			GroupName: updated.Name,
+		})
+	}(afterMemberUIDs)
+}
+
 // JoinGroup 自由加入公开群（事务包裹）。
 func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
+	var beforeMemberUIDs []string
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		uids, err := s.members.ListUIDs(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		beforeMemberUIDs = uids
 		group, err := s.joinGroupInternal(ctx, chatID, uid)
 		if err != nil {
 			return err
@@ -69,6 +126,7 @@ func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*mod
 		GroupID:     result.ChatID,
 		GroupName:   result.Name,
 	})
+	s.maybeGenerateGroupAvatarAsync(result.ChatID, beforeMemberUIDs)
 	return result, nil
 }
 
@@ -115,7 +173,13 @@ func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid strin
 func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID string, uidList []string) (*model.Group, []string, error) {
 	var result *model.Group
 	var addedUIDs []string
+	var beforeMemberUIDs []string
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		uids, err := s.members.ListUIDs(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		beforeMemberUIDs = uids
 		group, added, err := s.addMembersInternal(ctx, chatID, operatorUID, uidList)
 		if err != nil {
 			return err
@@ -135,6 +199,7 @@ func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID stri
 			GroupID:     result.ChatID,
 			GroupName:   result.Name,
 		})
+		s.maybeGenerateGroupAvatarAsync(result.ChatID, beforeMemberUIDs)
 	}
 	return result, addedUIDs, nil
 }
@@ -187,7 +252,13 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 // LeaveGroup 退出群（事务包裹）。
 func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
+	var beforeMemberUIDs []string
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		uids, err := s.members.ListUIDs(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		beforeMemberUIDs = uids
 		group, err := s.leaveGroupInternal(ctx, chatID, uid)
 		if err != nil {
 			return err
@@ -205,6 +276,7 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 		GroupID:     result.ChatID,
 		GroupName:   result.Name,
 	})
+	s.maybeGenerateGroupAvatarAsync(result.ChatID, beforeMemberUIDs)
 	return result, nil
 }
 
@@ -240,7 +312,13 @@ func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid stri
 // KickMember 踢出群成员（事务包裹）。
 func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	var result *model.Group
+	var beforeMemberUIDs []string
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+		uids, err := s.members.ListUIDs(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		beforeMemberUIDs = uids
 		group, err := s.kickMemberInternal(ctx, chatID, operatorUID, targetUID)
 		if err != nil {
 			return err
@@ -258,6 +336,7 @@ func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, tar
 		GroupID:     result.ChatID,
 		GroupName:   result.Name,
 	})
+	s.maybeGenerateGroupAvatarAsync(result.ChatID, beforeMemberUIDs)
 	return result, nil
 }
 
