@@ -117,6 +117,14 @@ export enum MessageType {
     group: GroupSummary;
   }
 
+  export interface GroupSettings {
+    join_method: 'free' | 'verify' | 'invite' | 'forbidden';
+    is_muted_all: boolean;
+    is_public: boolean;
+    allow_member_invite?: boolean;
+    muted_members?: string[];
+  }
+
   export interface Group {
     id: string;
     conversation_id: string;
@@ -125,6 +133,7 @@ export enum MessageType {
     owner_id: string;
     admins?: string[];
     member_count: number;
+    settings?: GroupSettings;
     status: string;
     created_at: string;
     updated_at: string;
@@ -157,6 +166,11 @@ export enum MessageType {
   export interface GroupUpdatePatch {
     name?: string;
   }
+
+  export type GroupSettingsPatch = Partial<Pick<
+    GroupSettings,
+    'join_method' | 'is_muted_all' | 'is_public' | 'allow_member_invite'
+  >>;
 
   export interface GroupMemberPage {
     items: GroupMember[];
@@ -820,6 +834,18 @@ export enum MessageType {
       return apiRequest<GroupDetailResponse>(
         this.baseURL,
         `/api/v1/groups/${groupId}`,
+        this.token,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        },
+      );
+    }
+
+    async updateGroupSettings(groupId: string, patch: GroupSettingsPatch): Promise<GroupDetailResponse> {
+      return apiRequest<GroupDetailResponse>(
+        this.baseURL,
+        `/api/v1/groups/${groupId}/settings`,
         this.token,
         {
           method: 'PATCH',

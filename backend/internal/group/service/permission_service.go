@@ -71,7 +71,11 @@ func (p *PermissionService) CheckPermission(ctx context.Context, chatID, uid str
 		if group.Settings.JoinMethod != model.JoinMethodFree || !group.Settings.IsPublic {
 			return PermissionResult{Allowed: false, Reason: "join_not_allowed"}, nil
 		}
-	case ActionDismissGroup, ActionTransferOwner, ActionSetMemberRole, ActionUpdateSettings:
+	case ActionUpdateSettings:
+		if !canUpdateGroupInfo(member) {
+			return PermissionResult{Allowed: false, Reason: "permission_denied"}, nil
+		}
+	case ActionDismissGroup, ActionTransferOwner, ActionSetMemberRole:
 		if member.Role != model.MemberRoleOwner {
 			return PermissionResult{Allowed: false, Reason: "owner_required"}, nil
 		}

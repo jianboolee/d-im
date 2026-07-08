@@ -60,3 +60,11 @@ func TestCanManageMembersDeniesRegularMember(t *testing.T) {
 		t.Fatalf("expected regular member to be denied member management")
 	}
 }
+
+func TestCanUpdateGroupInfoAllowsAdmin(t *testing.T) {
+	member := &model.GroupMember{Role: model.MemberRoleAdmin}
+
+	if !canUpdateGroupInfo(member) {
+		t.Fatalf("expected admin to update group management settings")
+	}
+}

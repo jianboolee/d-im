@@ -79,6 +79,15 @@
                 <span class="drawer-row-value">{{ groupName }}</span>
                 <i class="ri-arrow-right-s-line"></i>
               </button>
+              <button
+                v-if="isGroup && canManageMembers"
+                type="button"
+                class="drawer-row action-row"
+                @click="emit('manage-group')"
+              >
+                <span>群管理</span>
+                <i class="ri-arrow-right-s-line"></i>
+              </button>
               <button type="button" class="drawer-row action-row" @click="emit('search')">
                 <span>查找聊天内容</span>
                 <i class="ri-arrow-right-s-line"></i>
@@ -152,6 +161,7 @@ const emit = defineEmits<{
   'update-setting': [settings: { pinned?: boolean; muted?: boolean }]
   'edit-group-name': []
   'manage-members': []
+  'manage-group': []
 }>()
 
 const pinned = ref(false)

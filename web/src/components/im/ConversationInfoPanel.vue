@@ -18,6 +18,7 @@
     @update-group-name="handleUpdateGroupName"
     @update-setting="handleUpdateConversationSetting"
     @manage-members="openMemberManageDrawer"
+    @manage-group="showGroupSettingsDrawer = true"
     @leave="showLeaveConfirm = true"
   />
 
@@ -28,6 +29,14 @@
     :current-user-role="currentUserRole"
     :loading="loadingMemberManageMembers"
     @kick-member="requestKickMember"
+  />
+
+  <GroupSettingsManageDrawer
+    v-model="showGroupSettingsDrawer"
+    :settings="groupSettings"
+    :loading="savingGroupSettings"
+    :error="groupSettingsError"
+    @submit="handleUpdateGroupSettings"
   />
 
   <ConversationMessageSearchModal
@@ -75,10 +84,11 @@ import { useConversationList } from '@/composables/useConversationList'
 import { useUserProfiles } from '@/composables/useUserProfiles'
 import ConversationInfoDrawer from '@/components/im/ConversationInfoDrawer.vue'
 import GroupMemberManageDrawer from '@/components/im/GroupMemberManageDrawer.vue'
+import GroupSettingsManageDrawer from '@/components/im/GroupSettingsManageDrawer.vue'
 import ConversationMessageSearchModal from '@/components/im/ConversationMessageSearchModal.vue'
 import GroupNameEditDrawer from '@/components/im/GroupNameEditDrawer.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import type { Conversation, GroupMember, UserInfo } from '@/sdk/im'
+import type { Conversation, GroupMember, GroupSettings, GroupSettingsPatch, UserInfo } from '@/sdk/im'
 
 const props = defineProps<{
   modelValue: boolean
@@ -100,6 +110,7 @@ const { userMap, mergeUsers } = useUserProfiles()
 const groupDetailMembers = ref<GroupMember[]>([])
 const currentGroupMember = ref<GroupMember | null>(null)
 const memberManageMembers = ref<GroupMember[]>([])
+const groupSettings = ref<GroupSettings>()
 const groupName = ref('')
 const groupOwnerId = ref('')
 const groupAdminIds = ref<string[]>([])
@@ -111,10 +122,13 @@ const showMessageSearch = ref(false)
 const showLeaveConfirm = ref(false)
 const showGroupNameDrawer = ref(false)
 const showMemberManageDrawer = ref(false)
+const showGroupSettingsDrawer = ref(false)
 const showKickConfirm = ref(false)
 const leavingGroup = ref(false)
 const kickingMember = ref(false)
 const loadingMemberManageMembers = ref(false)
+const savingGroupSettings = ref(false)
+const groupSettingsError = ref('')
 const kickTarget = ref<GroupMember | null>(null)
 
 const isGroup = computed(() => props.conversation?.chat_type === 'group')
@@ -160,6 +174,7 @@ const resetGroupState = () => {
   groupDetailMembers.value = []
   currentGroupMember.value = null
   memberManageMembers.value = []
+  groupSettings.value = undefined
   groupName.value = ''
   groupOwnerId.value = ''
   groupAdminIds.value = []
@@ -167,7 +182,9 @@ const resetGroupState = () => {
   groupMembersHasMore.value = false
   kickTarget.value = null
   showMemberManageDrawer.value = false
+  showGroupSettingsDrawer.value = false
   showKickConfirm.value = false
+  groupSettingsError.value = ''
 }
 
 const loadInitialGroupMembers = async () => {
@@ -183,6 +200,7 @@ const loadInitialGroupMembers = async () => {
     groupName.value = detail.group?.name ?? props.conversation.group_info?.name ?? props.conversation.display_name ?? ''
     groupOwnerId.value = detail.group?.owner_id ?? ''
     groupAdminIds.value = detail.group?.admins ?? []
+    groupSettings.value = detail.group?.settings
     currentGroupMember.value = detail.current_member ?? null
     groupDetailMembers.value = detail.members ?? []
     groupMembersNextCursor.value = groupDetailMembers.value[groupDetailMembers.value.length - 1]?.id
@@ -313,6 +331,36 @@ const handleUpdateConversationSetting = async (settings: { pinned?: boolean; mut
   }
 }
 
+const handleUpdateGroupSettings = async (settings: GroupSettingsPatch) => {
+  const groupId = props.conversation?.group_id
+  const conversationId = props.conversation?.id
+  if (!groupId || !conversationId || !imStore.imSDK || savingGroupSettings.value) return
+
+  try {
+    savingGroupSettings.value = true
+    groupSettingsError.value = ''
+    const detail = await imStore.imSDK.updateGroupSettings(groupId, settings)
+    if (detail.group) {
+      groupSettings.value = detail.group.settings
+      groupOwnerId.value = detail.group.owner_id
+      groupAdminIds.value = detail.group.admins ?? groupAdminIds.value
+      updateConversationGroupInfo(conversationId, {
+        id: detail.group.id,
+        name: detail.group.name,
+        avatar_url: detail.group.avatar_url,
+        member_count: detail.group.member_count,
+      })
+    }
+    showGroupSettingsDrawer.value = false
+    showToast('群管理已更新')
+  } catch (error) {
+    console.error('更新群设置失败:', error)
+    groupSettingsError.value = error instanceof Error ? error.message : '更新失败'
+  } finally {
+    savingGroupSettings.value = false
+  }
+}
+
 const requestKickMember = (userId: string) => {
   const target = memberManageMembers.value.find((member) => member.user_id === userId)
     ?? groupDetailMembers.value.find((member) => member.user_id === userId)
@@ -382,6 +430,7 @@ watch(
       showMessageSearch.value = false
       showLeaveConfirm.value = false
       showMemberManageDrawer.value = false
+      showGroupSettingsDrawer.value = false
       showKickConfirm.value = false
       resetGroupState()
       return

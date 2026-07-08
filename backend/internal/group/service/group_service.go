@@ -527,7 +527,7 @@ func (s *GroupService) UpdateSettings(ctx context.Context, chatID, operatorUID s
 	if err != nil {
 		return nil, err
 	}
-	if member.Role != model.MemberRoleOwner {
+	if !canUpdateGroupInfo(member) {
 		return nil, ErrForbidden
 	}
 	if settings.JoinMethod == "" {
@@ -540,12 +540,6 @@ func (s *GroupService) UpdateSettings(ctx context.Context, chatID, operatorUID s
 	if err != nil {
 		return nil, err
 	}
-	s.publishEvent(ctx, GroupSystemEvent{
-		EventType:   EventTypeGroupInfoUpdated,
-		OperatorUID: operatorUID,
-		GroupID:     chatID,
-		GroupName:   result.Name,
-	})
 	return result, nil
 }
 
@@ -669,7 +663,11 @@ func (s *GroupService) CheckPermission(ctx context.Context, chatID, uid, action 
 		if !canEditGroupInfo(member) {
 			return false, "permission_denied", nil
 		}
-	case "dismiss_group", "transfer_owner", "set_member_role", "update_settings":
+	case "update_settings":
+		if !canUpdateGroupInfo(member) {
+			return false, "permission_denied", nil
+		}
+	case "dismiss_group", "transfer_owner", "set_member_role":
 		if member.Role != model.MemberRoleOwner {
 			return false, "owner_required", nil
 		}
