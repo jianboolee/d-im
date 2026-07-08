@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Config NATS配置
@@ -61,6 +62,11 @@ func (p *Publisher) Close() {
 // GetConn 获取底层 NATS 连接（用于订阅）
 func (p *Publisher) GetConn() *nats.Conn {
 	return p.conn
+}
+
+// JetStream 获取 JetStream 上下文，用于创建 durable consumer 消费持久化消息。
+func (p *Publisher) JetStream() (jetstream.JetStream, error) {
+	return jetstream.New(p.conn)
 }
 
 // Publish 发布消息到指定主题

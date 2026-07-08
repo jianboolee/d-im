@@ -103,12 +103,20 @@ func main() {
 	d.Start(ctx)
 	defer d.Stop()
 
-	// === user 事件订阅（原 user 服务）===
-	userSvc := service.NewUserService(uRepo)
-	conn := natsPub.GetConn()
-	if err := userSvc.SubscribeEvents(conn); err != nil {
-		log.Fatalf("[gateway] subscribe user events: %v", err)
+	// === user 事件同步（JetStream durable consumer，原 user 服务）===
+	if cfg.NATS.UserStream != "" {
+		js, jsErr := natsPub.JetStream()
+		if jsErr != nil {
+			log.Printf("[gateway] WARNING: jetstream not available, user sync disabled: %v", jsErr)
+		} else {
+			syncSvc := service.NewUserSyncService(uRepo)
+			if syncErr := syncSvc.Start(ctx, js, cfg.NATS.UserStream); syncErr != nil {
+				log.Printf("[gateway] WARNING: user sync start failed, continuing without sync: %v", syncErr)
+			}
+		}
 	}
+
+	conn := natsPub.GetConn()
 
 	// === NATS 消息消费（原 message 服务）===
 	_, err = conn.Subscribe("im.message.send", func(msg *nats.Msg) {

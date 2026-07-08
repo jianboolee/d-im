@@ -32,6 +32,7 @@ nats:
   user: ""
   password: ""
   publish_timeout: 2s
+  user_stream: USER_SYNC
   subjects:
     message_send: im.message.send
     message_push: im.message.push

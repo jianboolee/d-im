@@ -25,8 +25,10 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
+	ctx := context.Background()
+
 	// MongoDB
-	db, err := mongodb.NewClient(context.Background(), mongodb.Config{
+	db, err := mongodb.NewClient(ctx, mongodb.Config{
 		URI:      cfg.MongoDB.URI,
 		Database: cfg.MongoDB.Database,
 		PoolSize: cfg.MongoDB.PoolSize,
@@ -49,14 +51,21 @@ func main() {
 	}
 	defer natsPub.Close()
 
-	// User service
+	// User sync service (JetStream durable consumer)
 	userRepo := repository.NewUserRepo(db)
-	userSvc := service.NewUserService(userRepo)
 
-	// 订阅事件总线
-	conn := natsPub.GetConn()
-	if err := userSvc.SubscribeEvents(conn); err != nil {
-		log.Fatalf("subscribe events: %v", err)
+	if cfg.NATS.UserStream != "" {
+		js, jsErr := natsPub.JetStream()
+		if jsErr != nil {
+			log.Printf("[user] WARNING: jetstream not available, user sync disabled: %v", jsErr)
+		} else {
+			syncSvc := service.NewUserSyncService(userRepo)
+			if err := syncSvc.Start(ctx, js, cfg.NATS.UserStream); err != nil {
+				log.Printf("[user] WARNING: user sync start failed, continuing without sync: %v", err)
+			}
+		}
+	} else {
+		log.Println("[user] nats.user_stream not configured, skipping user sync")
 	}
 
 	log.Println("[user] service started, listening for user events")

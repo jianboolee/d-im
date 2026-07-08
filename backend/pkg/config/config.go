@@ -66,6 +66,7 @@ type NATSConfig struct {
 	User           string       `mapstructure:"user"`
 	Password       string       `mapstructure:"password"`
 	PublishTimeout string       `mapstructure:"publish_timeout"`
+	UserStream     string       `mapstructure:"user_stream"`
 	Subjects       NATSSubjects `mapstructure:"subjects"`
 }
 
@@ -141,6 +142,7 @@ func Load(configPath string) (*Config, error) {
 	// 支持环境变量覆盖：MONGODB_URI 覆盖 mongodb.uri
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+	_ = v.BindEnv("nats.user_stream", "NATS_USER_STREAM")
 	_ = v.BindEnv("auth.super_password", "IM_SUPER_PASSWORD")
 	_ = v.BindEnv("storage.provider", "STORAGE_PROVIDER")
 	_ = v.BindEnv("storage.public_base_url", "STORAGE_PUBLIC_BASE_URL")
