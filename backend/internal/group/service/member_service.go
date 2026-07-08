@@ -54,6 +54,17 @@ func (s *MemberService) publishEvent(ctx context.Context, event GroupSystemEvent
 	}
 }
 
+func (s *MemberService) currentChatLastSeq(ctx context.Context, chatID string) (int64, error) {
+	if s.chatRepo == nil {
+		return 0, nil
+	}
+	chat, err := s.chatRepo.FindByChatID(ctx, chatID)
+	if err != nil {
+		return 0, err
+	}
+	return chat.LastSeq, nil
+}
+
 func (s *MemberService) maybeGenerateGroupAvatarAsync(chatID string, beforeMemberUIDs []string) {
 	if s == nil || s.avatarGenerator == nil || chatID == "" {
 		return
@@ -160,7 +171,11 @@ func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid strin
 			return nil, err
 		}
 		if s.convMgr != nil {
-			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup}
+			lastReadSeq, err := s.currentChatLastSeq(ctx, chatID)
+			if err != nil {
+				return nil, err
+			}
+			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
 			if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
 				return nil, err
 			}
@@ -225,6 +240,14 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 	if err := ensureCapacity(group, len(adding)); err != nil {
 		return nil, nil, err
 	}
+	lastReadSeq := int64(0)
+	if s.convMgr != nil && len(adding) > 0 {
+		var err error
+		lastReadSeq, err = s.currentChatLastSeq(ctx, chatID)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	for _, uid := range adding {
 		if inserted, err := s.members.Add(ctx, &model.GroupMember{
 			ChatID:    chatID,
@@ -239,7 +262,7 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 				return nil, nil, err
 			}
 			if s.convMgr != nil {
-				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup}
+				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
 				if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
 					return nil, nil, err
 				}

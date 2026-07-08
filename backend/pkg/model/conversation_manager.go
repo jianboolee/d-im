@@ -40,10 +40,19 @@ func (m *ConversationManager) GenerateConversationID() string {
 // CreateOrUpdate 为用户创建或更新会话视图（upsert）
 func (m *ConversationManager) CreateOrUpdate(ctx context.Context, conv *Conversation) error {
 	now := time.Now()
+	lastReadSeq := conv.LastReadSeq
+	if lastReadSeq < 0 {
+		lastReadSeq = 0
+	}
 
 	filter := bson.M{
 		"uid":     conv.UID,
 		"chat_id": conv.ChatID,
+	}
+
+	set := bson.M{"updated_at": now}
+	if lastReadSeq > 0 {
+		set["last_read_at"] = now
 	}
 
 	update := bson.M{
@@ -55,8 +64,9 @@ func (m *ConversationManager) CreateOrUpdate(ctx context.Context, conv *Conversa
 			"joined_at":       now,
 			"created_at":      now,
 		},
-		"$set": bson.M{
-			"updated_at": now,
+		"$set": set,
+		"$max": bson.M{
+			"last_read_seq": lastReadSeq,
 		},
 		"$unset": bson.M{
 			"left_at": "",

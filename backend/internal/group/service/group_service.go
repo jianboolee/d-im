@@ -58,6 +58,17 @@ func (s *GroupService) publishEvent(ctx context.Context, event GroupSystemEvent)
 	}
 }
 
+func (s *GroupService) currentChatLastSeq(ctx context.Context, chatID string) (int64, error) {
+	if s.chatRepo == nil {
+		return 0, nil
+	}
+	chat, err := s.chatRepo.FindByChatID(ctx, chatID)
+	if err != nil {
+		return 0, err
+	}
+	return chat.LastSeq, nil
+}
+
 // CreateGroup 创建群（事务包裹 chats + groups + group_members + conversations）。
 func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	name = strings.TrimSpace(name)
@@ -265,6 +276,14 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 	if err := ensureCapacity(group, len(adding)); err != nil {
 		return nil, nil, err
 	}
+	lastReadSeq := int64(0)
+	if s.convMgr != nil && len(adding) > 0 {
+		var err error
+		lastReadSeq, err = s.currentChatLastSeq(ctx, chatID)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	for _, uid := range adding {
 		if inserted, err := s.members.Add(ctx, &model.GroupMember{
 			ChatID:    chatID,
@@ -279,7 +298,7 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 				return nil, nil, err
 			}
 			if s.convMgr != nil {
-				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup}
+				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
 				if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
 					return nil, nil, err
 				}
@@ -319,7 +338,11 @@ func (s *GroupService) JoinGroup(ctx context.Context, chatID, uid string) (*mode
 			return nil, err
 		}
 		if s.convMgr != nil {
-			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup}
+			lastReadSeq, err := s.currentChatLastSeq(ctx, chatID)
+			if err != nil {
+				return nil, err
+			}
+			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
 			if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
 				return nil, err
 			}
