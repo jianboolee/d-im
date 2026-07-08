@@ -304,7 +304,7 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 	if err != nil {
 		return nil, nil, err
 	}
-	if !canManageMembers(group, operator) {
+	if !canInviteMembers(group, operator) {
 		return nil, nil, ErrForbidden
 	}
 	newUIDs := uniqueNonEmpty(uidList)
@@ -475,7 +475,7 @@ func (s *GroupService) UpdateInfo(ctx context.Context, chatID, operatorUID strin
 	if err != nil {
 		return nil, err
 	}
-	if !canUpdateGroupInfo(operator) {
+	if !canEditGroupInfo(operator) {
 		return nil, ErrForbidden
 	}
 	fields := bson.M{}
@@ -554,7 +554,7 @@ func (s *GroupService) SetAnnouncement(ctx context.Context, chatID, operatorUID,
 	if err != nil {
 		return nil, err
 	}
-	if !canUpdateGroupInfo(member) {
+	if !canEditGroupInfo(member) {
 		return nil, ErrForbidden
 	}
 	result, err := s.groups.UpdateFields(ctx, chatID, bson.M{"announcement": strings.TrimSpace(announcement)})
@@ -657,8 +657,16 @@ func (s *GroupService) CheckPermission(ctx context.Context, chatID, uid, action 
 		return false, "member_muted", nil
 	}
 	switch action {
-	case "invite_member", "kick_member", "update_group_info", "set_announcement":
+	case "invite_member":
+		if !canInviteMembers(group, member) {
+			return false, "permission_denied", nil
+		}
+	case "kick_member":
 		if !canUpdateGroupInfo(member) {
+			return false, "permission_denied", nil
+		}
+	case "update_group_info", "set_announcement":
+		if !canEditGroupInfo(member) {
 			return false, "permission_denied", nil
 		}
 	case "dismiss_group", "transfer_owner", "set_member_role", "update_settings":
@@ -699,8 +707,23 @@ func canUpdateGroupInfo(member *model.GroupMember) bool {
 	return member != nil && (member.Role == model.MemberRoleOwner || member.Role == model.MemberRoleAdmin)
 }
 
+func canEditGroupInfo(member *model.GroupMember) bool {
+	return member != nil
+}
+
 func canManageMembers(_ *model.Group, member *model.GroupMember) bool {
 	return canUpdateGroupInfo(member)
+}
+
+func canInviteMembers(group *model.Group, member *model.GroupMember) bool {
+	if canUpdateGroupInfo(member) {
+		return true
+	}
+	return member != nil && allowsMemberInvite(group)
+}
+
+func allowsMemberInvite(group *model.Group) bool {
+	return group == nil || group.Settings.AllowMemberInvite == nil || *group.Settings.AllowMemberInvite
 }
 
 func isPrivileged(member *model.GroupMember) bool {

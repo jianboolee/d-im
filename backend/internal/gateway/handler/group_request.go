@@ -21,10 +21,11 @@ type inviteMembersRequest struct {
 
 // updateSettingsRequest 更新群设置请求。
 type updateSettingsRequest struct {
-	JoinMethod   *string  `json:"join_method"`
-	IsMutedAll   *bool    `json:"is_muted_all"`
-	IsPublic     *bool    `json:"is_public"`
-	MutedMembers []string `json:"muted_members"`
+	JoinMethod        *string  `json:"join_method"`
+	IsMutedAll        *bool    `json:"is_muted_all"`
+	IsPublic          *bool    `json:"is_public"`
+	AllowMemberInvite *bool    `json:"allow_member_invite"`
+	MutedMembers      []string `json:"muted_members"`
 }
 
 // setMemberRoleRequest 设置成员角色请求。

@@ -241,7 +241,7 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 	if err != nil {
 		return nil, nil, err
 	}
-	if !canManageMembers(group, operator) {
+	if !canInviteMembers(group, operator) {
 		return nil, nil, ErrForbidden
 	}
 	newUIDs := uniqueNonEmpty(uidList)

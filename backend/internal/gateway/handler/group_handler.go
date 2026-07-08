@@ -324,6 +324,9 @@ func (h *GroupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if req.IsPublic != nil {
 		settings.IsPublic = *req.IsPublic
 	}
+	if req.AllowMemberInvite != nil {
+		settings.AllowMemberInvite = req.AllowMemberInvite
+	}
 	if req.MutedMembers != nil {
 		settings.MutedMembers = uniqueNonEmpty(req.MutedMembers)
 	}

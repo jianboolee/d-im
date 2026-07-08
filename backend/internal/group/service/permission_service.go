@@ -55,8 +55,16 @@ func (p *PermissionService) CheckPermission(ctx context.Context, chatID, uid str
 	switch action {
 	case ActionSendMessage:
 		return PermissionResult{Allowed: true}, nil
-	case ActionInviteMember, ActionKickMember, ActionUpdateGroupInfo:
+	case ActionInviteMember:
+		if !canInviteMembers(group, member) {
+			return PermissionResult{Allowed: false, Reason: "permission_denied"}, nil
+		}
+	case ActionKickMember:
 		if !canManageMembers(group, member) {
+			return PermissionResult{Allowed: false, Reason: "permission_denied"}, nil
+		}
+	case ActionUpdateGroupInfo:
+		if !canEditGroupInfo(member) {
 			return PermissionResult{Allowed: false, Reason: "permission_denied"}, nil
 		}
 	case ActionJoinGroup:

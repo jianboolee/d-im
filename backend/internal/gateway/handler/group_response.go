@@ -43,6 +43,11 @@ func (h *GroupHandler) groupDTO(group *model.Group, conversationID string) group
 	if status == "" {
 		status = string(model.GroupStatusActive)
 	}
+	settings := group.Settings
+	if settings.AllowMemberInvite == nil {
+		allow := true
+		settings.AllowMemberInvite = &allow
+	}
 	return groupDTO{
 		ID:             group.ChatID,
 		ConversationID: conversationID,
@@ -53,7 +58,7 @@ func (h *GroupHandler) groupDTO(group *model.Group, conversationID string) group
 		Admins:         group.Admins,
 		MemberCount:    group.MemberCount,
 		MaxMembers:     group.MaxMembers,
-		Settings:       group.Settings,
+		Settings:       settings,
 		Announcement:   group.Announcement,
 		Status:         status,
 		CreatedAt:      group.CreatedAt.Format(timeFormatRFC3339Nano),

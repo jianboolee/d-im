@@ -37,10 +37,11 @@ type Group struct {
 
 // GroupSettings 群设置
 type GroupSettings struct {
-	JoinMethod   JoinMethod `bson:"join_method" json:"join_method"`     // 入群方式
-	IsMutedAll   bool       `bson:"is_muted_all" json:"is_muted_all"`   // 全员禁言
-	IsPublic     bool       `bson:"is_public" json:"is_public"`         // 是否公开群
-	MutedMembers []string   `bson:"muted_members" json:"muted_members"` // 被禁言成员
+	JoinMethod        JoinMethod `bson:"join_method" json:"join_method"`                                     // 入群方式
+	IsMutedAll        bool       `bson:"is_muted_all" json:"is_muted_all"`                                   // 全员禁言
+	IsPublic          bool       `bson:"is_public" json:"is_public"`                                         // 是否公开群
+	MutedMembers      []string   `bson:"muted_members" json:"muted_members"`                                 // 被禁言成员
+	AllowMemberInvite *bool      `bson:"allow_member_invite,omitempty" json:"allow_member_invite,omitempty"` // 是否允许普通成员邀请新成员；为空时按允许处理
 }
 
 // JoinMethod 入群方式
@@ -61,10 +62,15 @@ const (
 	GroupStatusDismissed GroupStatus = "dismissed" // 已解散
 )
 
-// DefaultGroupSettings 返回新群默认设置：仅邀请加入、公开群。
+// DefaultGroupSettings 返回新群默认设置：自由加入、公开群，允许成员邀请。
 func DefaultGroupSettings() GroupSettings {
 	return GroupSettings{
-		JoinMethod: JoinMethodFree,
-		IsPublic:   true,
+		JoinMethod:        JoinMethodFree,
+		IsPublic:          true,
+		AllowMemberInvite: boolPtr(true),
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
