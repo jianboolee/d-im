@@ -7,6 +7,9 @@ app:
 auth:
   super_password: ""
 
+group:
+  max_members: 100
+
 server:
   gateway:
     http_port: 8080

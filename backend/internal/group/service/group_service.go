@@ -18,7 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-const defaultMaxMembers = 500
+const defaultMaxMembers = 100
 
 type GroupService struct {
 	db              *mongo.Database
@@ -27,7 +27,9 @@ type GroupService struct {
 	members         *repository.MemberRepo
 	convMgr         *model.ConversationManager
 	avatarGenerator groupAvatarGenerator
+	users           UserProfileReader
 	eventPublisher  *EventPublisher
+	maxMembers      int
 }
 
 type groupAvatarGenerator interface {
@@ -48,6 +50,16 @@ func (s *GroupService) SetAvatarGenerator(generator groupAvatarGenerator) {
 	s.avatarGenerator = generator
 }
 
+func (s *GroupService) SetUserProfileReader(users UserProfileReader) {
+	s.users = users
+}
+
+func (s *GroupService) SetMaxMembers(maxMembers int) {
+	if maxMembers > 0 {
+		s.maxMembers = maxMembers
+	}
+}
+
 func (s *GroupService) SetEventPublisher(publisher *EventPublisher) {
 	s.eventPublisher = publisher
 }
@@ -56,6 +68,17 @@ func (s *GroupService) publishEvent(ctx context.Context, event GroupSystemEvent)
 	if s.eventPublisher != nil {
 		s.eventPublisher.Publish(ctx, event)
 	}
+}
+
+func (s *GroupService) effectiveMaxMembers() int {
+	if s != nil && s.maxMembers > 0 {
+		return s.maxMembers
+	}
+	return defaultMaxMembers
+}
+
+func (s *GroupService) ensureCapacity(group *model.Group, adding int) error {
+	return ensureCapacity(group, adding, s.effectiveMaxMembers())
 }
 
 func (s *GroupService) currentChatLastSeq(ctx context.Context, chatID string) (int64, error) {
@@ -72,16 +95,21 @@ func (s *GroupService) currentChatLastSeq(ctx context.Context, chatID string) (i
 // CreateGroup 创建群（事务包裹 chats + groups + group_members + conversations）。
 func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, fmt.Errorf("group name is required")
-	}
 	if ownerUID == "" {
 		return nil, ErrInvalid
 	}
+	allMembers := uniqueNonEmpty(append([]string{ownerUID}, memberUIDs...))
+	if len(allMembers) == 0 {
+		allMembers = []string{ownerUID}
+	}
+	if name == "" {
+		name = s.defaultGroupName(ctx, allMembers)
+	}
+	maxMembers := s.effectiveMaxMembers()
 
 	var result *model.Group
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
-		group, err := s.createGroupInternal(ctx, name, ownerUID, memberUIDs)
+		group, err := s.createGroupInternal(ctx, name, ownerUID, allMembers, maxMembers)
 		if err != nil {
 			return err
 		}
@@ -101,25 +129,41 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 	return result, nil
 }
 
+func (s *GroupService) defaultGroupName(ctx context.Context, memberUIDs []string) string {
+	names := make([]string, 0, 3)
+	for _, uid := range firstDefaultGroupNameMembers(memberUIDs) {
+		if s.users == nil {
+			continue
+		}
+		user, err := s.users.FindByID(ctx, uid)
+		if err != nil || user == nil {
+			continue
+		}
+		if name := strings.TrimSpace(user.Nickname); name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "群聊"
+	}
+	return strings.Join(names, "、")
+}
+
 // createGroupInternal 创建群的核心逻辑，用于事务内部。
-func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID string, memberUIDs []string) (*model.Group, error) {
+func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID string, allMembers []string, maxMembers int) (*model.Group, error) {
 	chat, err := s.chatRepo.CreateGroupChat(ctx, ownerUID)
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now()
-	allMembers := uniqueNonEmpty(append([]string{ownerUID}, memberUIDs...))
-	if len(allMembers) == 0 {
-		allMembers = []string{ownerUID}
-	}
 	group := &model.Group{
 		GroupID:     chat.ChatID,
 		ChatID:      chat.ChatID,
 		Name:        name,
 		OwnerUID:    ownerUID,
 		MemberCount: len(allMembers),
-		MaxMembers:  defaultMaxMembers,
+		MaxMembers:  maxMembers,
 		Settings:    model.DefaultGroupSettings(),
 		Status:      model.GroupStatusActive,
 		CreatedAt:   now,
@@ -273,7 +317,7 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 		}
 		adding = append(adding, uid)
 	}
-	if err := ensureCapacity(group, len(adding)); err != nil {
+	if err := s.ensureCapacity(group, len(adding)); err != nil {
 		return nil, nil, err
 	}
 	lastReadSeq := int64(0)
@@ -321,7 +365,7 @@ func (s *GroupService) JoinGroup(ctx context.Context, chatID, uid string) (*mode
 	if group.Settings.JoinMethod != model.JoinMethodFree || !group.Settings.IsPublic {
 		return nil, ErrForbidden
 	}
-	if err := ensureCapacity(group, 1); err != nil {
+	if err := s.ensureCapacity(group, 1); err != nil {
 		return nil, err
 	}
 	inserted, err := s.members.Add(ctx, &model.GroupMember{
@@ -672,11 +716,14 @@ func containsString(items []string, target string) bool {
 	return false
 }
 
-func ensureCapacity(group *model.Group, adding int) error {
+func ensureCapacity(group *model.Group, adding int, fallbackMaxMembers int) error {
 	if group == nil {
 		return mongo.ErrNoDocuments
 	}
 	maxMembers := group.MaxMembers
+	if maxMembers <= 0 {
+		maxMembers = fallbackMaxMembers
+	}
 	if maxMembers <= 0 {
 		maxMembers = defaultMaxMembers
 	}

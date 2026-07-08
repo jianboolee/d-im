@@ -26,6 +26,7 @@ type MemberService struct {
 	convMgr         *model.ConversationManager
 	avatarGenerator groupAvatarGenerator
 	eventPublisher  *EventPublisher
+	maxMembers      int
 }
 
 // NewMemberService 创建成员服务。
@@ -48,10 +49,27 @@ func (s *MemberService) SetAvatarGenerator(generator groupAvatarGenerator) {
 	s.avatarGenerator = generator
 }
 
+func (s *MemberService) SetMaxMembers(maxMembers int) {
+	if maxMembers > 0 {
+		s.maxMembers = maxMembers
+	}
+}
+
 func (s *MemberService) publishEvent(ctx context.Context, event GroupSystemEvent) {
 	if s.eventPublisher != nil {
 		s.eventPublisher.Publish(ctx, event)
 	}
+}
+
+func (s *MemberService) effectiveMaxMembers() int {
+	if s != nil && s.maxMembers > 0 {
+		return s.maxMembers
+	}
+	return defaultMaxMembers
+}
+
+func (s *MemberService) ensureCapacity(group *model.Group, adding int) error {
+	return ensureCapacity(group, adding, s.effectiveMaxMembers())
 }
 
 func (s *MemberService) currentChatLastSeq(ctx context.Context, chatID string) (int64, error) {
@@ -154,7 +172,7 @@ func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid strin
 	if group.Settings.JoinMethod != model.JoinMethodFree || !group.Settings.IsPublic {
 		return nil, ErrForbidden
 	}
-	if err := ensureCapacity(group, 1); err != nil {
+	if err := s.ensureCapacity(group, 1); err != nil {
 		return nil, err
 	}
 	inserted, err := s.members.Add(ctx, &model.GroupMember{
@@ -237,7 +255,7 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 		}
 		adding = append(adding, uid)
 	}
-	if err := ensureCapacity(group, len(adding)); err != nil {
+	if err := s.ensureCapacity(group, len(adding)); err != nil {
 		return nil, nil, err
 	}
 	lastReadSeq := int64(0)

@@ -91,7 +91,7 @@ func backfillGroups(ctx context.Context, db *mongo.Database) error {
 		}
 		maxMembers := chat.MaxMembers
 		if maxMembers <= 0 {
-			maxMembers = 500
+			maxMembers = 200
 		}
 		createdAt := chat.CreatedAt
 		if createdAt.IsZero() {

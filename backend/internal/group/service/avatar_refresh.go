@@ -3,6 +3,7 @@ package service
 import "strings"
 
 const groupAvatarMemberLimit = 9
+const defaultGroupNameMemberLimit = 3
 
 func avatarAffectingMembersChanged(before, after []string) bool {
 	before = firstAvatarMembers(before)
@@ -19,7 +20,18 @@ func avatarAffectingMembersChanged(before, after []string) bool {
 }
 
 func firstAvatarMembers(uids []string) []string {
-	result := make([]string, 0, groupAvatarMemberLimit)
+	return firstUniqueNonEmpty(uids, groupAvatarMemberLimit)
+}
+
+func firstDefaultGroupNameMembers(uids []string) []string {
+	return firstUniqueNonEmpty(uids, defaultGroupNameMemberLimit)
+}
+
+func firstUniqueNonEmpty(uids []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	result := make([]string, 0, limit)
 	seen := make(map[string]bool, len(uids))
 	for _, uid := range uids {
 		uid = strings.TrimSpace(uid)
@@ -28,7 +40,7 @@ func firstAvatarMembers(uids []string) []string {
 		}
 		seen[uid] = true
 		result = append(result, uid)
-		if len(result) == groupAvatarMemberLimit {
+		if len(result) == limit {
 			break
 		}
 	}

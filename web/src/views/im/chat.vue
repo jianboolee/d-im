@@ -445,7 +445,7 @@ const canSubmitNewConversation = computed(() => {
   if (newConversationMode.value === 'single') {
     return Boolean(newConversationUserId.value.trim())
   }
-  return Boolean(newGroupName.value.trim() && parseUserIds(newGroupMemberIdsText.value).length > 0)
+  return Boolean(parseUserIds(newGroupMemberIdsText.value).length > 0)
 })
 
 const pageTitle = computed(() => conversationTitle.value || '消息')
@@ -613,7 +613,7 @@ const createGroupConversation = async () => {
   const name = newGroupName.value.trim()
   const memberIds = parseUserIds(newGroupMemberIdsText.value)
     .filter((id) => id !== currentUserId.value)
-  if (!name || creatingConversation.value) return
+  if (creatingConversation.value) return
 
   if (memberIds.length === 0) {
     newConversationError.value = '至少输入一个成员用户 ID'

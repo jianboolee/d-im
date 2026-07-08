@@ -72,11 +72,6 @@ func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
-	if strings.TrimSpace(req.Name) == "" {
-		writeAPIError(w, http.StatusBadRequest, 400020, "name is required")
-		return
-	}
-
 	group, err := h.groups.CreateGroup(r.Context(), req.Name, uid, req.MemberUserIDs)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, 500401, "create group failed")

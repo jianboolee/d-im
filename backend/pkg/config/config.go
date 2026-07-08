@@ -19,6 +19,7 @@ type Config struct {
 	JWT     JWTConfig     `mapstructure:"jwt"`
 	Log     LogConfig     `mapstructure:"log"`
 	Storage StorageConfig `mapstructure:"storage"`
+	Group   GroupConfig   `mapstructure:"group"`
 }
 
 type AppConfig struct {
@@ -30,6 +31,10 @@ type AppConfig struct {
 
 type AuthConfig struct {
 	SuperPassword string `mapstructure:"super_password"`
+}
+
+type GroupConfig struct {
+	MaxMembers int `mapstructure:"max_members"`
 }
 
 type ServerConfig struct {
@@ -144,6 +149,7 @@ func Load(configPath string) (*Config, error) {
 	v.AutomaticEnv()
 	_ = v.BindEnv("nats.user_stream", "NATS_USER_STREAM")
 	_ = v.BindEnv("auth.super_password", "IM_SUPER_PASSWORD")
+	_ = v.BindEnv("group.max_members", "GROUP_MAX_MEMBERS")
 	_ = v.BindEnv("storage.provider", "STORAGE_PROVIDER")
 	_ = v.BindEnv("storage.public_base_url", "STORAGE_PUBLIC_BASE_URL")
 	_ = v.BindEnv("storage.max_image_size", "STORAGE_MAX_IMAGE_SIZE")
@@ -173,6 +179,9 @@ func Load(configPath string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+	if cfg.Group.MaxMembers <= 0 {
+		cfg.Group.MaxMembers = 100
 	}
 
 	log.Printf("[config] loaded: %s (env=%s)", v.ConfigFileUsed(), cfg.App.Env)
