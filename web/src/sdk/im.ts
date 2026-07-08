@@ -123,6 +123,7 @@ export enum MessageType {
     name: string;
     avatar_url?: string;
     owner_id: string;
+    admins?: string[];
     member_count: number;
     status: string;
     created_at: string;
@@ -144,6 +145,7 @@ export enum MessageType {
   export interface GroupDetailResponse {
     group: Group;
     members?: GroupMember[];
+    current_member?: GroupMember;
     conversation?: Conversation;
   }
 
@@ -850,6 +852,15 @@ export enum MessageType {
           method: 'POST',
           body: JSON.stringify({ member_user_ids: memberUserIds }),
         },
+      );
+    }
+
+    async kickGroupMember(groupId: string, userId: string): Promise<GroupDetailResponse> {
+      return apiRequest<GroupDetailResponse>(
+        this.baseURL,
+        `/api/v1/groups/${groupId}/members/${encodeURIComponent(userId)}`,
+        this.token,
+        { method: 'DELETE' },
       );
     }
 

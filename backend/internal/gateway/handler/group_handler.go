@@ -98,6 +98,7 @@ func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 // GetGroup 获取群详情。
 // GET /api/v1/groups/{id}
 func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.GetUserID(r.Context())
 	group := h.requireGroupMember(w, r)
 	if group == nil {
 		return
@@ -107,9 +108,15 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, 500405, "get group members failed")
 		return
 	}
+	currentMember, err := h.members.GetMember(r.Context(), group.ChatID, uid)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, 500405, "get current group member failed")
+		return
+	}
 	writeAPISuccess(w, map[string]interface{}{
-		"group":   h.groupDTO(group, h.currentConversationID(r, group.ChatID)),
-		"members": h.memberDTOs(r, group, members),
+		"group":          h.groupDTO(group, h.currentConversationID(r, group.ChatID)),
+		"members":        h.memberDTOs(r, group, members),
+		"current_member": h.memberDTOs(r, group, []*model.GroupMember{currentMember})[0],
 	})
 }
 

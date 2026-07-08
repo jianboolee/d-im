@@ -255,37 +255,13 @@
         </form>
       </div>
     </Teleport>
-    <Teleport to="body">
-      <div v-if="showInviteMembersModal" class="new-conversation-modal" @click.self="closeInviteMembersModal">
-        <form class="new-conversation-panel" role="dialog" aria-modal="true" aria-label="邀请成员" @submit.prevent="inviteMembers">
-          <div class="new-conversation-header">
-            <h2>邀请成员</h2>
-            <button class="new-conversation-close" type="button" aria-label="关闭" @click="closeInviteMembersModal">
-              <i class="ri-close-line"></i>
-            </button>
-          </div>
-          <label class="new-conversation-field">
-            <span>成员用户 ID</span>
-            <textarea
-              ref="inviteMembersInputRef"
-              v-model="inviteMemberIdsText"
-              rows="4"
-              placeholder="输入用户 ID，多个 ID 可用逗号、空格或换行分隔"
-              @keydown.esc="closeInviteMembersModal"
-            ></textarea>
-          </label>
-          <p v-if="inviteMembersError" class="new-conversation-error">{{ inviteMembersError }}</p>
-          <div class="new-conversation-actions">
-            <button class="new-conversation-cancel" type="button" @click="closeInviteMembersModal">
-              取消
-            </button>
-            <button class="new-conversation-submit" type="submit" :disabled="invitingMembers || parseUserIds(inviteMemberIdsText).length === 0">
-              {{ invitingMembers ? '邀请中' : '邀请' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </Teleport>
+    <GroupInviteDrawer
+      v-model="showInviteMembersDrawer"
+      :loading="invitingMembers"
+      :error="inviteMembersError"
+      :current-user-id="currentUserId"
+      @submit="inviteMembers"
+    />
     <ConversationInfoPanel
       v-model="showConversationInfoDrawer"
       :conversation="conversation"
@@ -329,6 +305,7 @@ const props = defineProps<{
 const MessageMoreOptions = defineAsyncComponent(() => import('@/components/im/MessageMoreOptions.vue'))
 const ConversationSearchModal = defineAsyncComponent(() => import('@/components/im/ConversationSearchModal.vue'))
 const ConversationInfoPanel = defineAsyncComponent(() => import('@/components/im/ConversationInfoPanel.vue'))
+const GroupInviteDrawer = defineAsyncComponent(() => import('@/components/im/GroupInviteDrawer.vue'))
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -354,11 +331,10 @@ const targetUser = ref<UserInfo | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const sidebarMenuRef = ref<HTMLElement | null>(null)
 const newConversationInputRef = ref<HTMLInputElement | null>(null)
-const inviteMembersInputRef = ref<HTMLTextAreaElement | null>(null)
 const showSidebarMenu = ref(false)
 const showConversationSearch = ref(false)
 const showNewConversationModal = ref(false)
-const showInviteMembersModal = ref(false)
+const showInviteMembersDrawer = ref(false)
 const showConversationInfoDrawer = ref(false)
 const newConversationMode = ref<'single' | 'group'>('single')
 const newConversationUserId = ref('')
@@ -366,7 +342,6 @@ const newGroupName = ref('')
 const newGroupMemberIdsText = ref('')
 const newConversationError = ref('')
 const creatingConversation = ref(false)
-const inviteMemberIdsText = ref('')
 const inviteMembersError = ref('')
 const invitingMembers = ref(false)
 const isMobileViewport = ref(false)
@@ -665,26 +640,13 @@ const handleInviteMembers = () => {
     showToast('当前会话不支持邀请')
     return
   }
-  showConversationInfoDrawer.value = false
-  showInviteMembersModal.value = true
-  inviteMembersError.value = ''
-  nextTick(() => {
-    inviteMembersInputRef.value?.focus()
-  })
-}
-
-const closeInviteMembersModal = () => {
-  if (invitingMembers.value) return
-  showInviteMembersModal.value = false
-  inviteMemberIdsText.value = ''
+  showInviteMembersDrawer.value = true
   inviteMembersError.value = ''
 }
 
-const inviteMembers = async () => {
+const inviteMembers = async (memberIds: string[]) => {
   const groupId = conversation.value?.group_id
   const conversationIdValue = conversation.value?.id
-  const memberIds = parseUserIds(inviteMemberIdsText.value)
-    .filter((id) => id !== currentUserId.value)
   if (!groupId || !conversationIdValue || invitingMembers.value) return
 
   if (memberIds.length === 0) {
@@ -711,8 +673,7 @@ const inviteMembers = async () => {
         member_count: detail.group.member_count,
       })
     }
-    showInviteMembersModal.value = false
-    inviteMemberIdsText.value = ''
+    showInviteMembersDrawer.value = false
     showToast('邀请已发送')
   } catch (error) {
     console.error('邀请成员失败:', error)

@@ -23,6 +23,9 @@
             </header> -->
 
             <section class="drawer-section participants-section">
+              <div v-if="isGroup" class="member-toolbar">
+                <span>群成员</span>
+              </div>
               <div class="participant-list">
                 <div
                   v-for="user in displayParticipants"
@@ -32,6 +35,32 @@
                   <img class="participant-avatar" :src="user.avatar || ''" alt="">
                   <span class="participant-name">{{ user.nickname || user.id }}</span>
                 </div>
+                <button
+                  v-if="isGroup"
+                  type="button"
+                  class="participant-item member-action-entry"
+                  title="邀请成员"
+                  aria-label="邀请成员"
+                  @click="handleInvite"
+                >
+                  <span class="member-action-icon">
+                    <i class="ri-add-line"></i>
+                  </span>
+                  <span class="participant-name"></span>
+                </button>
+                <button
+                  v-if="isGroup && canManageMembers"
+                  type="button"
+                  class="participant-item member-action-entry"
+                  title="移除成员"
+                  aria-label="移除成员"
+                  @click="emit('manage-members')"
+                >
+                  <span class="member-action-icon is-danger">
+                    <i class="ri-subtract-line"></i>
+                  </span>
+                  <span class="participant-name"></span>
+                </button>
               </div>
               <button
                 v-if="isGroup && hasMoreParticipants"
@@ -54,10 +83,6 @@
             <section class="drawer-section action-section">
               <button v-if="isGroup" type="button" class="drawer-row action-row" @click="handleEditGroupName">
                 <span>修改群名</span>
-                <i class="ri-arrow-right-s-line"></i>
-              </button>
-              <button v-if="isGroup" type="button" class="drawer-row action-row" @click="handleInvite">
-                <span>邀请成员</span>
                 <i class="ri-arrow-right-s-line"></i>
               </button>
               <button type="button" class="drawer-row action-row" @click="emit('search')">
@@ -112,6 +137,7 @@ import type { UserInfo } from '@/types/user'
 const props = defineProps<{
   modelValue: boolean
   participants: UserInfo[]
+  currentUserRole?: string
   isGroup?: boolean
   groupId?: string
   groupName?: string
@@ -131,12 +157,14 @@ const emit = defineEmits<{
   'update-group-name': [name: string]
   'update-setting': [settings: { pinned?: boolean; muted?: boolean }]
   'edit-group-name': []
+  'manage-members': []
 }>()
 
 const pinned = ref(false)
 const muted = ref(false)
 
 const displayParticipants = computed(() => props.participants.filter((user) => user.id))
+const canManageMembers = computed(() => props.currentUserRole === 'owner' || props.currentUserRole === 'admin')
 
 const close = () => {
   emit('update:modelValue', false)
@@ -258,6 +286,18 @@ onUnmounted(() => {
   padding: 18px 16px 16px;
 }
 
+.member-toolbar {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--text-color-dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .group-meta-row {
   display: flex;
   align-items: center;
@@ -309,6 +349,33 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.member-action-entry {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.member-action-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--text-color-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--text-color-light);
+}
+
+.member-action-entry:hover .member-action-icon {
+  background: var(--bg-color-light);
+}
+
+.member-action-icon i {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .load-members-btn {
