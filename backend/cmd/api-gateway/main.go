@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -22,14 +23,18 @@ import (
 	groupSvc "d-im/internal/group/service"
 	mediaSvc "d-im/internal/media/service"
 	mediaStorage "d-im/internal/media/storage"
+	"d-im/internal/message/dispatcher"
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
 	userRepo "d-im/internal/user/repository"
+	"d-im/internal/user/service"
 	"d-im/pkg/config"
 	"d-im/pkg/crypto"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
 	natsq "d-im/pkg/queue/nats"
+
+	"github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -92,6 +97,36 @@ func main() {
 
 	conversationSvc := convSvc.NewConversationService(convMgr, chatR)
 	uRepo := userRepo.NewUserRepo(db)
+
+	// === message dispatcher（原 message 服务）===
+	d := dispatcher.NewDispatcher(msgRepo, 4)
+	d.Start(ctx)
+	defer d.Stop()
+
+	// === user 事件订阅（原 user 服务）===
+	userSvc := service.NewUserService(uRepo)
+	conn := natsPub.GetConn()
+	if err := userSvc.SubscribeEvents(conn); err != nil {
+		log.Fatalf("[gateway] subscribe user events: %v", err)
+	}
+
+	// === NATS 消息消费（原 message 服务）===
+	_, err = conn.Subscribe("im.message.send", func(msg *nats.Msg) {
+		var req messageSvc.SendMessageReq
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			log.Printf("[gateway] unmarshal send request failed: %v", err)
+			return
+		}
+		_, err := msgSvc.Send(context.Background(), &req)
+		if err != nil {
+			log.Printf("[gateway] send failed: chat=%s sender=%s type=%s err=%v", req.ChatID, req.SenderID, req.MsgType, err)
+		}
+	})
+	if err != nil {
+		log.Fatalf("[gateway] subscribe im.message.send: %v", err)
+	}
+	log.Printf("[gateway] message consumer started, subscribed to im.message.send")
+
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo, natsPub)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatR, groupService, uRepo)

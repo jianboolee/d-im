@@ -1,4 +1,4 @@
-.PHONY: run run-gateway run-message run-connector build dev clean demo
+.PHONY: run run-gateway run-connector build dev clean demo
 
 # 自动加载 .env 文件（如果存在）
 ifneq (,$(wildcard .env))
@@ -23,33 +23,21 @@ dev-down:
 # 编译
 build:
 	go build -o bin/api-gateway ./cmd/api-gateway
-	go build -o bin/message ./cmd/message
 	go build -o bin/connector ./cmd/connector
-	go build -o bin/user ./cmd/user
 
 # 启动 api-gateway
 run-gateway:
 	go run ./cmd/api-gateway -config $(CONFIG)
 
-# 启动 message 服务
-run-message:
-	go run ./cmd/message -config $(CONFIG)
-
 # 启动 connector
 run-connector:
 	go run ./cmd/connector -config $(CONFIG)
 
-# 启动 user 服务（订阅事件总线）
-run-user:
-	go run ./cmd/user -config $(CONFIG)
-
 # 启动所有服务
 run:
 	@echo "Starting all services with config: $(CONFIG)"
-	@echo "  make run-gateway  # HTTP + WebSocket API"
-	@echo "  make run-message  # Message processing"
-	@echo "  make run-connector # WebSocket connections"
-	@echo "  make run-user      # User event subscription"
+	@echo "  make run-gateway   # HTTP API + Message processing + User events"
+	@echo "  make run-connector  # WebSocket connections"
 
 # 清理
 clean:

@@ -25,10 +25,10 @@ dim{domain}.{event}
 Examples:
 
 ```text
-dimuser.created
-dimuser.profile_updated
-dimuser.status_changed
-dimuser.deleted
+dsaas.user.created
+dsaas.user.profile_updated
+dsaas.user.status_changed
+dsaas.user.deleted
 ```
 
 Subjects describe domain facts, not consumers. Avoid names such as `dimim.user.created`.
@@ -39,7 +39,7 @@ Subjects describe domain facts, not consumers. Avoid names such as `dimim.user.c
 {
   "id": "event_id",
   "type": "user.created",
-  "subject": "dimuser.created",
+  "subject": "dsaas.user.created",
   "aggregate_type": "user",
   "aggregate_id": "user_id",
   "occurred_at": "2026-07-03T12:00:00+08:00",
@@ -100,13 +100,13 @@ verification materials
 Initial expected consumers:
 
 ```text
-dimuser.created
+dsaas.user.created
 Consumers: im-service, recommendation-service
 
-dimuser.profile_updated
+dsaas.user.profile_updated
 Consumers: im-service, recommendation-service
 
-dimuser.status_changed
+dsaas.user.status_changed
 Consumers: im-service, recommendation-service
 ```
 

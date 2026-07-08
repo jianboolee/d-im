@@ -26,10 +26,10 @@ func NewUserService(repo *repository.UserRepo) *UserService {
 // SubscribeEvents 订阅事件总线用户事件
 func (s *UserService) SubscribeEvents(conn *nats.Conn) error {
 	subjects := []string{
-		"dimuser.created",
-		"dimuser.profile_updated",
-		"dimuser.status_changed",
-		"dimuser.deleted",
+		"dsaas.user.created",
+		"dsaas.user.profile_updated",
+		"dsaas.user.status_changed",
+		"dsaas.user.deleted",
 	}
 
 	for _, subject := range subjects {
