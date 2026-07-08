@@ -400,11 +400,21 @@ func (s *GroupService) LeaveGroup(ctx context.Context, chatID, uid string) (*mod
 	if err != nil {
 		return nil, err
 	}
-	if member.Role == model.MemberRoleOwner && group.MemberCount > 1 {
-		return nil, fmt.Errorf("%w: owner must transfer owner before leaving", ErrInvalid)
-	}
 	if group.MemberCount <= 1 {
 		return s.DismissGroup(ctx, chatID, uid)
+	}
+	if member.Role == model.MemberRoleOwner {
+		nextOwner, err := s.members.FirstJoinedExcept(ctx, chatID, uid)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := s.members.SetRole(ctx, chatID, nextOwner.UID, model.MemberRoleOwner); err != nil {
+			return nil, err
+		}
+		group, err = s.groups.UpdateFields(ctx, chatID, bson.M{"owner_uid": nextOwner.UID})
+		if err != nil {
+			return nil, err
+		}
 	}
 	removed, err := s.members.Remove(ctx, chatID, uid)
 	if err != nil {

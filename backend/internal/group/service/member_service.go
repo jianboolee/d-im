@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -294,21 +293,34 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
 	var beforeMemberUIDs []string
+	var ownerTransferredTo string
 	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
 		uids, err := s.members.ListUIDs(ctx, chatID)
 		if err != nil {
 			return err
 		}
 		beforeMemberUIDs = uids
-		group, err := s.leaveGroupInternal(ctx, chatID, uid)
+		group, transferredTo, err := s.leaveGroupInternal(ctx, chatID, uid)
 		if err != nil {
 			return err
 		}
 		result = group
+		ownerTransferredTo = transferredTo
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if ownerTransferredTo != "" {
+		s.publishEvent(ctx, GroupSystemEvent{
+			EventType:   EventTypeOwnerTransferred,
+			OperatorUID: uid,
+			TargetUIDs:  []string{ownerTransferredTo},
+			GroupID:     result.ChatID,
+			GroupName:   result.Name,
+			BeforeValue: uid,
+			AfterValue:  ownerTransferredTo,
+		})
 	}
 	s.publishEvent(ctx, GroupSystemEvent{
 		EventType:   EventTypeMemberLeft,
@@ -321,33 +333,46 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 	return result, nil
 }
 
-func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid string) (*model.Group, error) {
+func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid string) (*model.Group, string, error) {
 	group, member, err := s.requireMember(ctx, chatID, uid)
 	if err != nil {
-		return nil, err
-	}
-	if member.Role == model.MemberRoleOwner && group.MemberCount > 1 {
-		return nil, fmt.Errorf("%w: owner must transfer owner before leaving", ErrInvalid)
+		return nil, "", err
 	}
 	if group.MemberCount <= 1 {
-		return s.dismissGroupInternal(ctx, chatID, uid)
+		dismissed, err := s.dismissGroupInternal(ctx, chatID, uid)
+		return dismissed, "", err
+	}
+	ownerTransferredTo := ""
+	if member.Role == model.MemberRoleOwner {
+		nextOwner, err := s.members.FirstJoinedExcept(ctx, chatID, uid)
+		if err != nil {
+			return nil, "", err
+		}
+		if _, err := s.members.SetRole(ctx, chatID, nextOwner.UID, model.MemberRoleOwner); err != nil {
+			return nil, "", err
+		}
+		group, err = s.groups.UpdateFields(ctx, chatID, bson.M{"owner_uid": nextOwner.UID})
+		if err != nil {
+			return nil, "", err
+		}
+		ownerTransferredTo = nextOwner.UID
 	}
 	removed, err := s.members.Remove(ctx, chatID, uid)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if removed {
 		group, err = s.groups.IncMemberCount(ctx, chatID, -1)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	if s.convMgr != nil {
 		if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return group, nil
+	return group, ownerTransferredTo, nil
 }
 
 // KickMember 踢出群成员（事务包裹）。

@@ -82,6 +82,20 @@ func (r *MemberRepo) Find(ctx context.Context, chatID, uid string) (*model.Group
 	return &member, nil
 }
 
+func (r *MemberRepo) FirstJoinedExcept(ctx context.Context, chatID, excludeUID string) (*model.GroupMember, error) {
+	var member model.GroupMember
+	err := r.coll.FindOne(ctx, bson.M{
+		"chat_id": chatID,
+		"uid":     bson.M{"$ne": excludeUID},
+	}, options.FindOne().
+		SetSort(bson.D{{Key: "joined_at", Value: 1}, {Key: "uid", Value: 1}})).
+		Decode(&member)
+	if err != nil {
+		return nil, err
+	}
+	return &member, nil
+}
+
 func (r *MemberRepo) List(ctx context.Context, chatID string, limit, offset int64) ([]*model.GroupMember, error) {
 	if limit <= 0 {
 		limit = 20
