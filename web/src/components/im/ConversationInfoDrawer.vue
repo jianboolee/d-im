@@ -73,16 +73,10 @@
               </button>
             </section>
 
-            <section v-if="isGroup" class="drawer-section group-section">
-              <div class="group-name-row">
-                <span class="group-name-label">群名称</span>
-                <span class="group-name-value">{{ groupName }}</span>
-              </div>
-            </section>
-
             <section class="drawer-section action-section">
-              <button v-if="isGroup" type="button" class="drawer-row action-row" @click="handleEditGroupName">
-                <span>修改群名</span>
+              <button v-if="isGroup" type="button" class="drawer-row action-row group-name-action" @click="handleEditGroupName">
+                <span>群聊名称</span>
+                <span class="drawer-row-value">{{ groupName }}</span>
                 <i class="ri-arrow-right-s-line"></i>
               </button>
               <button type="button" class="drawer-row action-row" @click="emit('search')">
@@ -395,29 +389,6 @@ onUnmounted(() => {
   opacity: 0.7;
 }
 
-.group-section {
-  padding: 14px 16px;
-  background: #fff;
-}
-
-.group-name-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.group-name-label {
-  font-size: 12px;
-  color: var(--text-color-secondary);
-}
-
-.group-name-value {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-color-dark);
-  word-break: break-all;
-}
-
 .action-section,
 .setting-section,
 .danger-section {
@@ -442,6 +413,23 @@ onUnmounted(() => {
 
 .action-row {
   cursor: pointer;
+}
+
+.group-name-action > span:first-child {
+  flex-shrink: 0;
+}
+
+.drawer-row-value {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-color-secondary);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .action-row i {
