@@ -211,6 +211,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		}
 		targetUIDs = excludeUID(members, req.SenderID)
 	}
+	senderName := s.senderDisplayName(ctx, req.SenderID, req.SenderName)
 
 	msg := &model.Message{
 		MsgID:          msgID,
@@ -219,7 +220,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		Seq:            msgSeq,
 		ClientMsgID:    req.ClientMsgID,
 		SenderID:       req.SenderID,
-		SenderName:     req.SenderName,
+		SenderName:     senderName,
 		MsgType:        req.MsgType,
 		Content:        content,
 		ContentPreview: types.BuildContentPreview(req.MsgType, content),
@@ -261,6 +262,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 			MsgID:          msg.MsgID,
 			Seq:            msg.Seq,
 			SenderID:       msg.SenderID,
+			SenderName:     msg.SenderName,
 			MsgType:        msg.MsgType,
 			ContentPreview: msg.ContentPreview,
 			ClientTime:     msg.ClientTime,
@@ -499,6 +501,11 @@ func buildWSMessageDTO(msg *model.Message, mailbox *model.UserMailbox, conv *mod
 		conversationID = conv.ConversationID
 	}
 
+	sender := map[string]string{"id": msg.SenderID}
+	if msg.SenderName != "" {
+		sender["nickname"] = msg.SenderName
+	}
+
 	return wsMessageDTO{
 		ID:              msg.MsgID,
 		MessageID:       msg.MsgID,
@@ -506,7 +513,7 @@ func buildWSMessageDTO(msg *model.Message, mailbox *model.UserMailbox, conv *mod
 		ChatID:          msg.ChatID,
 		ChatType:        msg.ChatType,
 		SenderID:        msg.SenderID,
-		Sender:          map[string]string{"id": msg.SenderID},
+		Sender:          sender,
 		MessageType:     msg.MsgType,
 		Content:         model.ContentMap(msg.Content),
 		ContentPreview:  msg.ContentPreview,

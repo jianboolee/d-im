@@ -31,7 +31,7 @@ export function formatLastMessagePreview(
     snapshot.sender_id !== currentUserId &&
     snapshot.msg_type !== 'system_event'
   ) {
-    const senderName = snapshot.sender_id
+    const senderName = snapshot.sender_name
     return senderName ? `${senderName}: ${previewText}` : previewText
   }
   return previewText

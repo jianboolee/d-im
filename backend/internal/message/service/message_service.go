@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/message/repository"
@@ -19,6 +20,7 @@ type MessageService struct {
 	repo     *repository.MessageRepo
 	chatRepo *chatRepo.ChatRepo
 	groups   messageGroupReader
+	users    messageUserReader
 	convMgr  *model.ConversationManager
 	natsPub  *natsq.Publisher
 }
@@ -26,6 +28,10 @@ type MessageService struct {
 type messageGroupReader interface {
 	GetMemberUIDs(ctx context.Context, chatID string) ([]string, error)
 	CheckPermission(ctx context.Context, chatID, uid, action string) (bool, string, error)
+}
+
+type messageUserReader interface {
+	FindByID(ctx context.Context, id string) (*model.User, error)
 }
 
 // NewMessageService 创建消息服务
@@ -40,6 +46,25 @@ func NewMessageService(repo *repository.MessageRepo, chatRepo *chatRepo.ChatRepo
 
 func (s *MessageService) SetGroupReader(groups messageGroupReader) {
 	s.groups = groups
+}
+
+func (s *MessageService) SetUserReader(users messageUserReader) {
+	s.users = users
+}
+
+func (s *MessageService) senderDisplayName(ctx context.Context, senderID, fallback string) string {
+	fallback = strings.TrimSpace(fallback)
+	if fallback != "" {
+		return fallback
+	}
+	if s == nil || s.users == nil || strings.TrimSpace(senderID) == "" {
+		return ""
+	}
+	user, err := s.users.FindByID(ctx, senderID)
+	if err != nil || user == nil {
+		return ""
+	}
+	return strings.TrimSpace(user.Nickname)
 }
 
 // GenerateMsgID 生成消息ID（UUID v7）。

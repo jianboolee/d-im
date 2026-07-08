@@ -7,6 +7,7 @@ function toSnapshot(message: Message): LastMessage {
     msg_id: message.id ?? '',
     sequence: message.seq ?? 0,
     sender_id: message.sender_id ?? '',
+    sender_name: message.sender_profile?.nickname,
     msg_type: message.type,
     content_preview: content,
     client_time: message.created_at ?? new Date().toISOString(),

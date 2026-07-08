@@ -36,6 +36,7 @@ export enum MessageType {
     msg_id: string
     sequence: number
     sender_id: string
+    sender_name?: string
     msg_type: MessageType
     content_preview: string
     client_time: string
@@ -327,6 +328,7 @@ export enum MessageType {
       msg_id: String(item.msg_id ?? item.message_id ?? item.id ?? ''),
       sequence: Number(item.sequence ?? item.seq ?? 0),
       sender_id: String(item.sender_id ?? ''),
+      sender_name: item.sender_name == null ? undefined : String(item.sender_name),
       msg_type: (item.msg_type ?? item.message_type ?? item.type ?? MessageType.Text) as MessageType,
       content_preview: item.content_preview == null ? '' : String(item.content_preview),
       client_time: String(item.client_time ?? item.created_at ?? item.server_time ?? new Date().toISOString()),

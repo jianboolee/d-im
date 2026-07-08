@@ -60,6 +60,7 @@ type LastMessage struct {
 	MsgID          string      `bson:"msg_id" json:"msg_id"`
 	Seq            int64       `bson:"seq" json:"sequence"`
 	SenderID       string      `bson:"sender_id" json:"sender_id"`
+	SenderName     string      `bson:"sender_name,omitempty" json:"sender_name,omitempty"`
 	MsgType        MessageType `bson:"msg_type" json:"msg_type"`
 	ContentPreview string      `bson:"content_preview" json:"content_preview"`
 	ClientTime     time.Time   `bson:"client_time" json:"client_time"`

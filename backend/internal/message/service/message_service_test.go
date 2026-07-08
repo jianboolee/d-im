@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -9,11 +10,34 @@ import (
 	"d-im/pkg/types"
 )
 
+type fakeMessageUserReader map[string]*model.User
+
+func (r fakeMessageUserReader) FindByID(_ context.Context, id string) (*model.User, error) {
+	return r[id], nil
+}
+
 func TestGenerateMsgIDUsesMessagePrefix(t *testing.T) {
 	svc := NewMessageService(nil, nil, nil, nil)
 	msgID := svc.GenerateMsgID()
 	if !strings.HasPrefix(msgID, "msg_") {
 		t.Fatalf("expected msg_ prefix, got %q", msgID)
+	}
+}
+
+func TestSenderDisplayNameResolvesUserNickname(t *testing.T) {
+	svc := NewMessageService(nil, nil, nil, nil)
+	svc.SetUserReader(fakeMessageUserReader{
+		"user_a": {ID: "user_a", Nickname: "Alice"},
+	})
+
+	if got := svc.senderDisplayName(context.Background(), "user_a", ""); got != "Alice" {
+		t.Fatalf("expected Alice, got %q", got)
+	}
+	if got := svc.senderDisplayName(context.Background(), "user_a", "请求昵称"); got != "请求昵称" {
+		t.Fatalf("expected request name to win, got %q", got)
+	}
+	if got := svc.senderDisplayName(context.Background(), "missing", ""); got != "" {
+		t.Fatalf("expected empty fallback for missing user, got %q", got)
 	}
 }
 
@@ -26,6 +50,7 @@ func TestBuildWSMessageDTOUsesReceiverMailboxView(t *testing.T) {
 		Seq:            12,
 		ClientMsgID:    "cmid_001",
 		SenderID:       "user_a",
+		SenderName:     "Alice",
 		MsgType:        types.MessageTypeText,
 		Content:        types.TextContent{Text: "hello"},
 		ContentPreview: "hello",
@@ -64,8 +89,8 @@ func TestBuildWSMessageDTOUsesReceiverMailboxView(t *testing.T) {
 	if dto.Content["text"] != "hello" {
 		t.Fatalf("expected normalized content text, got %#v", dto.Content)
 	}
-	if sender, ok := dto.Sender.(map[string]string); !ok || sender["id"] != "user_a" {
-		t.Fatalf("expected sender id user_a, got %#v", dto.Sender)
+	if sender, ok := dto.Sender.(map[string]string); !ok || sender["id"] != "user_a" || sender["nickname"] != "Alice" {
+		t.Fatalf("expected sender id and nickname, got %#v", dto.Sender)
 	}
 }
 

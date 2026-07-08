@@ -85,10 +85,12 @@ func main() {
 	chatR := chatRepo.NewChatRepo(db)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
+	uRepo := userRepo.NewUserRepo(db)
 	groupService := groupSvc.NewGroupService(db, chatR, gRepo, mRepo, convMgr)
 	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convMgr)
 	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convMgr, natsPub)
 	msgSvc.SetGroupReader(groupService)
+	msgSvc.SetUserReader(uRepo)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
 	if err != nil {
 		log.Fatalf("media storage: %v", err)
@@ -96,7 +98,6 @@ func main() {
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
 	conversationSvc := convSvc.NewConversationService(convMgr, chatR)
-	uRepo := userRepo.NewUserRepo(db)
 
 	// === message dispatcher（原 message 服务）===
 	d := dispatcher.NewDispatcher(msgRepo, 4)
