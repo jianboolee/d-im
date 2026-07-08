@@ -644,6 +644,12 @@ const handleInviteMembers = () => {
   inviteMembersError.value = ''
 }
 
+const formatInviteMembersError = (error: unknown) => {
+  if (!(error instanceof Error)) return '邀请成员失败'
+  if (/forbidden|403/i.test(error.message)) return '没有权限邀请成员'
+  return error.message || '邀请成员失败'
+}
+
 const inviteMembers = async (memberIds: string[]) => {
   const groupId = conversation.value?.group_id
   const conversationIdValue = conversation.value?.id
@@ -677,7 +683,7 @@ const inviteMembers = async (memberIds: string[]) => {
     showToast('邀请已发送')
   } catch (error) {
     console.error('邀请成员失败:', error)
-    inviteMembersError.value = error instanceof Error ? error.message : '邀请成员失败'
+    inviteMembersError.value = formatInviteMembersError(error)
   } finally {
     invitingMembers.value = false
   }
