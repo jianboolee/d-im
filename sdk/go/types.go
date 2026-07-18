@@ -1,4 +1,4 @@
-package sdk
+package dimsdk
 
 // UserData 用户同步数据
 type UserData struct {

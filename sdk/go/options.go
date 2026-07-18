@@ -1,4 +1,4 @@
-package sdk
+package dimsdk
 
 // ClientOptions SDK 客户端配置
 type ClientOptions struct {
