@@ -1,6 +1,7 @@
 package dimsdk
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +13,14 @@ func TestClientUsesExpectedAuthentication(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/sdk/user/sync":
+		case "/api/v1/sdk/users/user-a":
+			if r.Method != http.MethodPut {
+				t.Fatalf("method = %q, want PUT", r.Method)
+			}
 			if got := r.Header.Get("X-API-Key"); got != "test-key" {
 				t.Fatalf("X-API-Key = %q, want test-key", got)
 			}
-			_ = json.NewEncoder(w).Encode(SyncUserResp{Status: "ok"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": 0, "data": map[string]interface{}{"user_id": "user-a", "version": 1}})
 		case "/api/v1/conversations/single":
 			if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
 				t.Fatalf("Authorization = %q, want Bearer access-token", got)
@@ -32,11 +36,11 @@ func TestClientUsesExpectedAuthentication(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientOptions{BaseURL: server.URL, APIKey: "test-key"})
-	if err := client.UpsertUser(UserData{UserID: "user-a"}); err != nil {
+	if err := client.UpsertUser(context.Background(), UserData{UserID: "user-a", Status: "active", Version: 1}); err != nil {
 		t.Fatalf("UpsertUser() error = %v", err)
 	}
 
-	conversation, err := client.CreateSingleConversation("access-token", "user-b")
+	conversation, err := client.CreateSingleConversation(context.Background(), "access-token", "user-b")
 	if err != nil {
 		t.Fatalf("CreateSingleConversation() error = %v", err)
 	}
@@ -65,7 +69,7 @@ func TestSendMessageUsesCurrentAPIContract(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientOptions{BaseURL: server.URL})
-	resp, err := client.SendMessage("access-token", SendMessageReq{
+	resp, err := client.SendMessage(context.Background(), "access-token", SendMessageReq{
 		ChatID:      "chat-1",
 		MessageType: "text",
 		Content:     map[string]string{"text": "hello"},

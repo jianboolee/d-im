@@ -35,15 +35,10 @@ nats:
   user: ""
   password: ""
   publish_timeout: 2s
-  user_stream: USER_SYNC
   subjects:
     message_send: im.message.send
     message_push: im.message.push
     message_event: im.message.event
-    user_created: dsaas.user.created
-    user_updated: dsaas.user.profile_updated
-    user_status: dsaas.user.status_changed
-    user_deleted: dsaas.user.deleted
 
 jwt:
   secret: im-secret-key-change-me

@@ -1,10 +1,13 @@
 package dimsdk
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 // GetLoginURL 获取 SSO 登录 URL（业务端可以直接跳转到此地址）
-func (c *Client) GetLoginURL(id string) (string, error) {
-	respBody, err := c.do("POST", "/api/v1/auth/ticket", map[string]string{
+func (c *Client) GetLoginURL(ctx context.Context, id string) (string, error) {
+	respBody, err := c.do(ctx, "POST", "/api/v1/auth/ticket", map[string]string{
 		"id": id,
 	})
 	if err != nil {

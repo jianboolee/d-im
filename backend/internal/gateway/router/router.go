@@ -38,8 +38,7 @@ func NewRouter(
 	}
 
 	// 业务 SDK 路由（API Key 鉴权，在 handler 内完成）
-	mux.HandleFunc("POST /api/v1/sdk/user/sync", sdkHandler.SyncUser)
-	mux.HandleFunc("POST /api/v1/sdk/user/batch-sync", sdkHandler.BatchSyncUsers)
+	mux.HandleFunc("PUT /api/v1/sdk/users/{id}", sdkHandler.PutUserSnapshot)
 
 	// ---- 受保护的路由（需要 JWT access_token）----
 	protected := http.NewServeMux()

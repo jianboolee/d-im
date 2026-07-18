@@ -1,13 +1,14 @@
 package dimsdk
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 )
 
 // CreateSingleConversation 创建或获取当前用户与指定用户的单聊会话。
-func (c *Client) CreateSingleConversation(accessToken, peerUserID string) (*Conversation, error) {
-	respBody, err := c.doWithToken("POST", "/api/v1/conversations/single", map[string]string{
+func (c *Client) CreateSingleConversation(ctx context.Context, accessToken, peerUserID string) (*Conversation, error) {
+	respBody, err := c.doWithToken(ctx, "POST", "/api/v1/conversations/single", map[string]string{
 		"peer_user_id": peerUserID,
 	}, accessToken)
 	if err != nil {
@@ -29,8 +30,8 @@ func (c *Client) CreateSingleConversation(accessToken, peerUserID string) (*Conv
 }
 
 // SendMessage 向已存在的会话发送消息。
-func (c *Client) SendMessage(accessToken string, req SendMessageReq) (*SendMessageResp, error) {
-	respBody, err := c.doWithToken("POST", "/api/v1/messages", req, accessToken)
+func (c *Client) SendMessage(ctx context.Context, accessToken string, req SendMessageReq) (*SendMessageResp, error) {
+	respBody, err := c.doWithToken(ctx, "POST", "/api/v1/messages", req, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}

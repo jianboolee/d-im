@@ -2,15 +2,20 @@ package dimsdk
 
 // UserData 用户同步数据
 type UserData struct {
-	UserID   string `json:"user_id"`
-	Nickname string `json:"nickname,omitempty"`
-	Avatar   string `json:"avatar_url,omitempty"`
-	Status   string `json:"status,omitempty"` // active / disabled
+	UserID   string                 `json:"-"`
+	Nickname string                 `json:"nickname"`
+	Avatar   string                 `json:"avatar_url"`
+	Status   string                 `json:"status"` // active / disabled
+	Version  int64                  `json:"version"`
+	Ext      map[string]interface{} `json:"ext,omitempty"`
 }
 
-// SyncUserResp 同步用户响应
-type SyncUserResp struct {
-	Status string `json:"status"`
+type userSnapshot struct {
+	Nickname string                 `json:"nickname"`
+	Avatar   string                 `json:"avatar_url"`
+	Status   string                 `json:"status"`
+	Version  int64                  `json:"version"`
+	Ext      map[string]interface{} `json:"ext,omitempty"`
 }
 
 // Conversation 会话的基本信息。

@@ -71,7 +71,6 @@ type NATSConfig struct {
 	User           string       `mapstructure:"user"`
 	Password       string       `mapstructure:"password"`
 	PublishTimeout string       `mapstructure:"publish_timeout"`
-	UserStream     string       `mapstructure:"user_stream"`
 	Subjects       NATSSubjects `mapstructure:"subjects"`
 }
 
@@ -79,10 +78,6 @@ type NATSSubjects struct {
 	MessageSend  string `mapstructure:"message_send"`
 	MessagePush  string `mapstructure:"message_push"`
 	MessageEvent string `mapstructure:"message_event"`
-	UserCreated  string `mapstructure:"user_created"`
-	UserUpdated  string `mapstructure:"user_updated"`
-	UserStatus   string `mapstructure:"user_status"`
-	UserDeleted  string `mapstructure:"user_deleted"`
 }
 
 type JWTConfig struct {
@@ -147,7 +142,6 @@ func Load(configPath string) (*Config, error) {
 	// 支持环境变量覆盖：MONGODB_URI 覆盖 mongodb.uri
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-	_ = v.BindEnv("nats.user_stream", "NATS_USER_STREAM")
 	_ = v.BindEnv("auth.super_password", "IM_SUPER_PASSWORD")
 	_ = v.BindEnv("group.max_members", "GROUP_MAX_MEMBERS")
 	_ = v.BindEnv("storage.provider", "STORAGE_PROVIDER")

@@ -27,7 +27,6 @@ import (
 	"d-im/internal/message/repository"
 	messageSvc "d-im/internal/message/service"
 	userRepo "d-im/internal/user/repository"
-	"d-im/internal/user/service"
 	"d-im/pkg/config"
 	"d-im/pkg/crypto"
 	"d-im/pkg/model"
@@ -105,19 +104,6 @@ func main() {
 	d := dispatcher.NewDispatcher(msgRepo, 4)
 	d.Start(ctx)
 	defer d.Stop()
-
-	// === user 事件同步（JetStream durable consumer，原 user 服务）===
-	if cfg.NATS.UserStream != "" {
-		js, jsErr := natsPub.JetStream()
-		if jsErr != nil {
-			log.Printf("[gateway] WARNING: jetstream not available, user sync disabled: %v", jsErr)
-		} else {
-			syncSvc := service.NewUserSyncService(uRepo)
-			if syncErr := syncSvc.Start(ctx, js, cfg.NATS.UserStream); syncErr != nil {
-				log.Printf("[gateway] WARNING: user sync start failed, continuing without sync: %v", syncErr)
-			}
-		}
-	}
 
 	conn := natsPub.GetConn()
 

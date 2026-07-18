@@ -3,29 +3,28 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
-	"d-im/pkg/model"
-
+	userRepository "d-im/internal/user/repository"
 	"d-im/pkg/crypto"
+	"d-im/pkg/model"
 )
 
-type syncUserRequest struct {
-	UserID   string `json:"user_id"`
-	Nickname string `json:"nickname,omitempty"`
-	Avatar   string `json:"avatar_url,omitempty"`
-	Status   string `json:"status,omitempty"`
-}
-
-type syncUserResponse struct {
-	Status string `json:"status"`
+type userSnapshotRequest struct {
+	Nickname string                 `json:"nickname"`
+	Avatar   string                 `json:"avatar_url"`
+	Status   string                 `json:"status"`
+	Version  int64                  `json:"version"`
+	Ext      map[string]interface{} `json:"ext,omitempty"`
 }
 
 type userRepo interface {
-	Upsert(ctx context.Context, user *model.User) error
-	BatchUpsert(ctx context.Context, users []*model.User) error
+	UpsertSnapshot(ctx context.Context, user *model.User) error
 }
 
 // SDKHandler 业务 SDK HTTP 处理器
@@ -47,52 +46,61 @@ func (h *SDKHandler) auth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// SyncUser POST /api/v1/sdk/user/sync
-func (h *SDKHandler) SyncUser(w http.ResponseWriter, r *http.Request) {
+// PutUserSnapshot PUT /api/v1/sdk/users/{id}
+func (h *SDKHandler) PutUserSnapshot(w http.ResponseWriter, r *http.Request) {
 	if !h.auth(w, r) {
 		return
 	}
 
-	var user syncUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+	userID := strings.TrimSpace(r.PathValue("id"))
+	if userID == "" {
+		writeAPIError(w, http.StatusBadRequest, 400101, "user id is required")
 		return
 	}
 
-	u := &model.User{ID: user.UserID, Nickname: user.Nickname, Avatar: user.Avatar, Status: user.Status, UpdatedAt: time.Now()}
-	if err := h.userRepo.Upsert(r.Context(), u); err != nil {
-		log.Printf("[sdk] upsert user failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "upsert failed"})
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var snapshot userSnapshotRequest
+	if err := decoder.Decode(&snapshot); err != nil {
+		writeAPIError(w, http.StatusBadRequest, 400102, "invalid user snapshot")
 		return
 	}
-	log.Printf("[sdk] user synced: uid=%s", user.UserID)
-	writeJSON(w, http.StatusOK, syncUserResponse{Status: "ok"})
-}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeAPIError(w, http.StatusBadRequest, 400102, "invalid user snapshot")
+		return
+	}
+	if snapshot.Version <= 0 {
+		writeAPIError(w, http.StatusBadRequest, 400103, "version must be positive")
+		return
+	}
+	if snapshot.Status != "active" && snapshot.Status != "disabled" {
+		writeAPIError(w, http.StatusBadRequest, 400104, "status must be active or disabled")
+		return
+	}
+	if len(snapshot.Nickname) > 200 || len(snapshot.Avatar) > 2048 {
+		writeAPIError(w, http.StatusBadRequest, 400105, "user snapshot field too long")
+		return
+	}
 
-// BatchSyncUsers POST /api/v1/sdk/user/batch-sync
-func (h *SDKHandler) BatchSyncUsers(w http.ResponseWriter, r *http.Request) {
-	if !h.auth(w, r) {
+	u := &model.User{
+		ID:        userID,
+		Nickname:  snapshot.Nickname,
+		Avatar:    snapshot.Avatar,
+		Status:    snapshot.Status,
+		Version:   snapshot.Version,
+		Ext:       snapshot.Ext,
+		UpdatedAt: time.Now(),
+	}
+	if err := h.userRepo.UpsertSnapshot(r.Context(), u); err != nil {
+		if errors.Is(err, userRepository.ErrStaleUserVersion) {
+			writeAPIError(w, http.StatusConflict, 409101, "stale user version")
+			return
+		}
+		log.Printf("[sdk] upsert user snapshot failed: uid=%s version=%d err=%v", userID, snapshot.Version, err)
+		writeAPIError(w, http.StatusInternalServerError, 500101, "upsert user snapshot failed")
 		return
 	}
-
-	var req struct {
-		Users []syncUserRequest `json:"users"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	now := time.Now()
-	users := make([]*model.User, len(req.Users))
-	for i, u := range req.Users {
-		users[i] = &model.User{ID: u.UserID, Nickname: u.Nickname, Avatar: u.Avatar, Status: u.Status, UpdatedAt: now}
-	}
-	if err := h.userRepo.BatchUpsert(r.Context(), users); err != nil {
-		log.Printf("[sdk] batch upsert failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "batch upsert failed"})
-		return
-	}
-	log.Printf("[sdk] batch synced %d users", len(users))
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	log.Printf("[sdk] user snapshot synced: uid=%s version=%d", userID, snapshot.Version)
+	writeAPISuccess(w, map[string]interface{}{"user_id": userID, "version": snapshot.Version})
 }

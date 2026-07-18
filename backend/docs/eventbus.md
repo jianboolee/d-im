@@ -25,10 +25,8 @@ dim{domain}.{event}
 Examples:
 
 ```text
-dsaas.user.created
-dsaas.user.profile_updated
-dsaas.user.status_changed
-dsaas.user.deleted
+dim.group.member_joined
+dim.message.recalled
 ```
 
 Subjects describe domain facts, not consumers. Avoid names such as `dimim.user.created`.
@@ -38,76 +36,15 @@ Subjects describe domain facts, not consumers. Avoid names such as `dimim.user.c
 ```json
 {
   "id": "event_id",
-  "type": "user.created",
-  "subject": "dsaas.user.created",
-  "aggregate_type": "user",
-  "aggregate_id": "user_id",
+  "type": "group.member_joined",
+  "subject": "dim.group.member_joined",
+  "aggregate_type": "group",
+  "aggregate_id": "group_id",
   "occurred_at": "2026-07-03T12:00:00+08:00",
   "source": "api",
   "data": {},
   "metadata": {}
 }
-```
-
-## User Events
-
-First phase user events:
-
-```text
-user.created
-user.profile_updated
-user.status_changed
-user.deleted
-```
-
-User event payloads use a whitelist snapshot. They may include:
-
-```text
-user_id
-nickname
-avatar_url
-gender
-bio
-status
-role
-user_type
-is_protected
-verification_type
-created_at
-updated_at
-changed_fields
-from_status
-to_status
-reason
-deleted_at
-```
-
-They must not include:
-
-```text
-password_hash
-token
-openid
-unionid
-phone
-email
-identity documents
-verification materials
-```
-
-## Consumer Registry
-
-Initial expected consumers:
-
-```text
-dsaas.user.created
-Consumers: im-service, recommendation-service
-
-dsaas.user.profile_updated
-Consumers: im-service, recommendation-service
-
-dsaas.user.status_changed
-Consumers: im-service, recommendation-service
 ```
 
 ## Runtime Configuration
@@ -132,30 +69,3 @@ EVENTBUS_MAX_ATTEMPTS=5
 ```
 
 `eventbus` is not included in the default `WORKER_TASKS` value yet, so local development and existing worker deployments keep their current behavior until the task is added.
-
-## Current Scope
-
-The current implementation records user module events into `eventbus_events` and can publish pending events to NATS through the eventbus worker.
-
-Covered user module entry points:
-
-```text
-AdminCreateUser -> user.created
-EnsureUserForPhoneLogin -> user.created
-UpdateProfile -> user.profile_updated
-AdminUpdateUser -> user.profile_updated
-SetUserStatus/AdminSetStatus -> user.status_changed
-AdminDeleteUser -> user.deleted
-```
-
-Known follow-up:
-
-```text
-Manual replay tooling for failed events can be added after worker behavior is observed in deployment.
-```
-
-Consumer-facing user event contract:
-
-```text
-api/docs/user-events.md
-```

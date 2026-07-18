@@ -2,6 +2,7 @@ package dimsdk
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,8 +37,8 @@ type TokenPair struct {
 }
 
 // GetSession 为指定用户创建 API Session（使用 API Key 换取 JWT）
-func (c *Client) GetSession(id string) (*TokenPair, error) {
-	respBody, err := c.do("POST", "/api/v1/auth/session", map[string]string{
+func (c *Client) GetSession(ctx context.Context, id string) (*TokenPair, error) {
+	respBody, err := c.do(ctx, "POST", "/api/v1/auth/session", map[string]string{
 		"id": id,
 	})
 	if err != nil {
@@ -56,11 +57,11 @@ func (c *Client) GetSession(id string) (*TokenPair, error) {
 }
 
 // do 执行 API 请求
-func (c *Client) do(method, path string, body interface{}) ([]byte, error) {
-	return c.doWithToken(method, path, body, "")
+func (c *Client) do(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	return c.doWithToken(ctx, method, path, body, "")
 }
 
-func (c *Client) doWithToken(method, path string, body interface{}, accessToken string) ([]byte, error) {
+func (c *Client) doWithToken(ctx context.Context, method, path string, body interface{}, accessToken string) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -70,7 +71,7 @@ func (c *Client) doWithToken(method, path string, body interface{}, accessToken 
 		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest(method, c.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

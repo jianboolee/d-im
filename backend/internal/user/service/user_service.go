@@ -8,7 +8,7 @@ import (
 )
 
 // UserService 系统内部用户查询服务。
-// 用户数据的来源由 UserSyncService 从账户系统 JetStream stream 同步。
+// 用户数据由业务系统通过 SDK HTTP 接口同步。
 type UserService struct {
 	repo *repository.UserRepo
 }
