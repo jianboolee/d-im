@@ -1,4 +1,4 @@
-.PHONY: run run-gateway run-connector build dev clean demo
+.PHONY: run run-gateway run-connector build dev clean
 
 # 自动加载 .env 文件（如果存在）
 ifneq (,$(wildcard .env))
@@ -42,6 +42,3 @@ run:
 # 清理
 clean:
 	rm -rf bin/
-
-demo:
-	go run ./demo

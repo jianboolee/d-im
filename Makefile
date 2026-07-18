@@ -10,4 +10,4 @@ debug-login:
 	./scripts/dev-login.sh $(UID)
 
 demo:
-	cd backend && make demo
+	cd sdk/go/demo && go run .

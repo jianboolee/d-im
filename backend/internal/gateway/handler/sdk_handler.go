@@ -8,10 +8,20 @@ import (
 	"time"
 
 	"d-im/pkg/model"
-	"d-im/pkg/sdk"
 
 	"d-im/pkg/crypto"
 )
+
+type syncUserRequest struct {
+	UserID   string `json:"user_id"`
+	Nickname string `json:"nickname,omitempty"`
+	Avatar   string `json:"avatar_url,omitempty"`
+	Status   string `json:"status,omitempty"`
+}
+
+type syncUserResponse struct {
+	Status string `json:"status"`
+}
 
 type userRepo interface {
 	Upsert(ctx context.Context, user *model.User) error
@@ -43,7 +53,7 @@ func (h *SDKHandler) SyncUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user sdk.UserData
+	var user syncUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
@@ -56,7 +66,7 @@ func (h *SDKHandler) SyncUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[sdk] user synced: uid=%s", user.UserID)
-	writeJSON(w, http.StatusOK, sdk.SyncUserResp{Ok: "ok"})
+	writeJSON(w, http.StatusOK, syncUserResponse{Status: "ok"})
 }
 
 // BatchSyncUsers POST /api/v1/sdk/user/batch-sync
@@ -66,7 +76,7 @@ func (h *SDKHandler) BatchSyncUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Users []sdk.UserData `json:"users"`
+		Users []syncUserRequest `json:"users"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})

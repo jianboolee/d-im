@@ -1,10 +1,10 @@
 package main
 
-import "d-im/pkg/sdk"
+import dimsdk "github.com/jianboolee/d-im/sdk/go"
 
 // allUsers 返回预置的测试用户
-func allUsers() []sdk.UserData {
-	return []sdk.UserData{
+func allUsers() []dimsdk.UserData {
+	return []dimsdk.UserData{
 		{UserID: "user_a", Nickname: "Alice", Avatar: "https://oss.21rv.com/uploads/avatar/1.jpg", Status: "active"},
 		{UserID: "user_b", Nickname: "Bob", Avatar: "https://oss.21rv.com/uploads/avatar/2.jpg", Status: "active"},
 		{UserID: "user_c", Nickname: "Charlie", Avatar: "https://oss.21rv.com/uploads/avatar/3.jpg", Status: "active"},

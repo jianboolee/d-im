@@ -99,16 +99,13 @@ curl -X POST http://localhost:8080/api/v1/auth/token \
   -d '{"ticket": "<ticket>", "device_id": "web_chrome_v1"}'
 
 # 发送消息（需 access_token）
-curl -X POST http://localhost:8080/api/v1/message/send \
+curl -X POST http://localhost:8080/api/v1/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <access_token>" \
   -d '{
     "chat_id": "single_user_001_user_002",
-    "chat_type": "single",
-    "from_name": "张三",
-    "msg_type": "text",
-    "content": {"text": "你好！"},
-    "target_uids": ["user_002"]
+    "message_type": "text",
+    "content": {"text": "你好！"}
   }'
 ```
 
@@ -143,7 +140,7 @@ ws.onmessage = (event) => {
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| POST | `/api/v1/message/send` | Bearer access_token | 发送消息 |
+| POST | `/api/v1/messages` | Bearer access_token | 发送消息 |
 | POST | `/api/v1/message/recall` | Bearer access_token | 撤回消息 |
 | POST | `/api/v1/message/forward` | Bearer access_token | 转发消息 |
 | GET | `/api/v1/message/list` | Bearer access_token | 查询消息列表 |

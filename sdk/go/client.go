@@ -57,6 +57,10 @@ func (c *Client) GetSession(id string) (*TokenPair, error) {
 
 // do 执行 API 请求
 func (c *Client) do(method, path string, body interface{}) ([]byte, error) {
+	return c.doWithToken(method, path, body, "")
+}
+
+func (c *Client) doWithToken(method, path string, body interface{}, accessToken string) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -72,7 +76,11 @@ func (c *Client) do(method, path string, body interface{}) ([]byte, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
+	if accessToken == "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

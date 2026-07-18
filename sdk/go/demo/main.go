@@ -1,22 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
-	"d-im/pkg/model"
-	"d-im/pkg/sdk"
+	dimsdk "github.com/jianboolee/d-im/sdk/go"
 )
 
 func main() {
 	apiKey := envOrDefault("JWT_API_KEY", "im-api-key-change-me")
 	baseURL := envOrDefault("IM_BASE_URL", "http://localhost:8080")
 
-	client := sdk.NewClient(sdk.ClientOptions{
+	client := dimsdk.NewClient(dimsdk.ClientOptions{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 	})
@@ -44,7 +40,7 @@ func main() {
 		fmt.Printf("  客服:   %s\n", url)
 	}
 
-	// 3. 获取 API Session（管理员身份调用标准网关）
+	// 3. 获取 API Session
 	fmt.Println("\n=== 3. 获取 API Session ===")
 	session, err := client.GetSession("admin")
 	if err != nil {
@@ -52,9 +48,7 @@ func main() {
 	}
 	fmt.Printf("  ✅ access_token: %s...\n", session.AccessToken[:20])
 
-	token := session.AccessToken
-
-	// 4. 发送文本消息（通过标准 JWT 网关，完整链路）
+	// 4. 创建单聊会话并发送文本消息
 	fmt.Println("\n=== 4. 发送文本消息 ===")
 	texts := []struct{ from, to, text string }{
 		{"user_a", "user_b", "Bob 你好，今天的方案我看了，有几个问题想沟通一下"},
@@ -62,14 +56,20 @@ func main() {
 		{"admin", "user_c", "您的订单 #20260705-001 已经发货，请注意查收"},
 	}
 	for _, t := range texts {
-		chatID := model.GenerateChatID()
-		_, err := apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
-			"chat_id":     chatID,
-			"chat_type":   "single",
-			"sender_name": t.from,
-			"msg_type":    "text",
-			"content":     map[string]string{"text": t.text},
-			"target_uids": []string{t.to},
+		senderSession, sessionErr := client.GetSession(t.from)
+		if sessionErr != nil {
+			log.Printf("  ❌ %s→%s: 获取 session 失败: %v", t.from, t.to, sessionErr)
+			continue
+		}
+		conversation, conversationErr := client.CreateSingleConversation(senderSession.AccessToken, t.to)
+		if conversationErr != nil {
+			log.Printf("  ❌ %s→%s: 创建会话失败: %v", t.from, t.to, conversationErr)
+			continue
+		}
+		_, err := client.SendMessage(senderSession.AccessToken, dimsdk.SendMessageReq{
+			ChatID:      conversation.ChatID,
+			MessageType: "text",
+			Content:     map[string]string{"text": t.text},
 		})
 		if err != nil {
 			log.Printf("  ❌ %s→%s: %v", t.from, t.to, err)
@@ -80,14 +80,14 @@ func main() {
 
 	// 5. 发送卡片消息
 	fmt.Println("\n=== 5. 发送卡片消息 ===")
-	cardChatID := model.GenerateChatID()
-	_, err = apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
-		"chat_id":     cardChatID,
-		"chat_type":   "single",
-		"sender_name": "客服小王",
-		"msg_type":    "card",
-		"content":     map[string]string{"title": "夏季新款连衣裙", "description": "限时优惠 ¥299", "image_url": "https://oss.21rv.com/uploads/product/1.jpg", "action_url": "https://shop.example.com/item/123"},
-		"target_uids": []string{"user_a"},
+	conversation, err := client.CreateSingleConversation(session.AccessToken, "user_a")
+	if err != nil {
+		log.Fatalf("  ❌ 创建客服会话失败: %v", err)
+	}
+	_, err = client.SendMessage(session.AccessToken, dimsdk.SendMessageReq{
+		ChatID:      conversation.ChatID,
+		MessageType: "card",
+		Content:     map[string]string{"title": "夏季新款连衣裙", "description": "限时优惠 ¥299", "image_url": "https://oss.21rv.com/uploads/product/1.jpg", "action_url": "https://shop.example.com/item/123"},
 	})
 	if err != nil {
 		log.Printf("  ❌: %v", err)
@@ -97,13 +97,10 @@ func main() {
 
 	// 6. 发送链接消息
 	fmt.Println("\n=== 6. 发送链接消息 ===")
-	_, err = apiPost(token, baseURL, "/api/v1/message/send", map[string]interface{}{
-		"chat_id":     cardChatID,
-		"chat_type":   "single",
-		"sender_name": "客服小王",
-		"msg_type":    "link",
-		"content":     map[string]string{"url": "https://example.com/promo", "title": "全场满200减30", "description": "618 年中大促，全场商品参与活动"},
-		"target_uids": []string{"user_a"},
+	_, err = client.SendMessage(session.AccessToken, dimsdk.SendMessageReq{
+		ChatID:      conversation.ChatID,
+		MessageType: "link",
+		Content:     map[string]string{"url": "https://example.com/promo", "title": "全场满200减30", "description": "618 年中大促，全场商品参与活动"},
 	})
 	if err != nil {
 		log.Printf("  ❌: %v", err)
@@ -112,28 +109,6 @@ func main() {
 	}
 
 	fmt.Println("\n所有演示操作完成！")
-}
-
-func apiPost(token, baseURL, path string, body interface{}) (map[string]interface{}, error) {
-	data, _ := json.Marshal(body)
-	req, _ := http.NewRequest("POST", baseURL+path, bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %v", resp.StatusCode, result["error"])
-	}
-	return result, nil
 }
 
 func envOrDefault(key, defaultVal string) string {
