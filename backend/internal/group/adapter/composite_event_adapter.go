@@ -56,7 +56,6 @@ func (a *CompositeEventAdapter) publishMessageSend(event groupSvc.GroupSystemEve
 	}
 	req := service.SendMessageReq{
 		ChatID:     event.GroupID,
-		ChatType:   types.ChatTypeGroup,
 		SenderID:   event.OperatorUID,
 		MsgType:    types.MessageTypeSystemEvent,
 		Content:    contentBytes,

@@ -6,7 +6,6 @@ import (
 
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
-	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -28,31 +27,23 @@ func (r *ChatRepo) Collection() *mongo.Collection {
 	return r.coll
 }
 
-// CreateOrGetSingleChat 获取或创建单聊会话。
-func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*model.Chat, error) {
-	singleKey, err := model.NewSingleChatKey(uid1, uid2)
-	if err != nil {
-		return nil, err
-	}
-	chatID := model.NewChatID()
-	now := time.Now()
-
+// InsertOrGetSingle 原子插入单聊候选实体，或返回同一 single_key 的已有 Chat。
+func (r *ChatRepo) InsertOrGetSingle(ctx context.Context, candidate *model.Chat) (*model.Chat, error) {
 	filter := bson.M{
-		"chat_type":  types.ChatTypeSingle,
-		"single_key": singleKey,
+		"chat_type":  candidate.ChatType,
+		"single_key": candidate.SingleKey,
 	}
 	update := bson.M{
 		"$setOnInsert": bson.M{
-			"chat_id":      chatID,
-			"chat_type":    types.ChatTypeSingle,
-			"members":      []string{uid1, uid2},
-			"member_count": 2,
-			"last_seq":     0,
-			"created_at":   now,
-		},
-		"$set": bson.M{
-			"single_key": singleKey,
-			"updated_at": now,
+			"chat_id":      candidate.ChatID,
+			"chat_type":    candidate.ChatType,
+			"single_key":   candidate.SingleKey,
+			"members":      candidate.Members,
+			"member_count": candidate.MemberCount,
+			"last_seq":     candidate.LastSeq,
+			"created_by":   candidate.CreatedBy,
+			"created_at":   candidate.CreatedAt,
+			"updated_at":   candidate.UpdatedAt,
 		},
 	}
 
@@ -61,7 +52,7 @@ func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string)
 		SetReturnDocument(options.After)
 
 	var chat model.Chat
-	err = r.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
+	err := r.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
 	if mongo.IsDuplicateKeyError(err) {
 		err = r.coll.FindOne(ctx, filter).Decode(&chat)
 	}
@@ -71,21 +62,10 @@ func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string)
 	return &chat, nil
 }
 
-// CreateGroupChat 创建群聊对应的消息会话实体。
-func (r *ChatRepo) CreateGroupChat(ctx context.Context, creatorUID string) (*model.Chat, error) {
-	chatID := model.NewChatID()
-	now := time.Now()
-	chat := &model.Chat{
-		ChatID:    chatID,
-		ChatType:  types.ChatTypeGroup,
-		LastSeq:   0,
-		CreatedBy: creatorUID,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
+// Insert 插入已由领域服务构造完成的 Chat。
+func (r *ChatRepo) Insert(ctx context.Context, chat *model.Chat) error {
 	_, err := r.coll.InsertOne(ctx, chat)
-	return chat, err
+	return err
 }
 
 // FindByChatID 根据 chatID 查询 Chat。

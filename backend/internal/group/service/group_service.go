@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	chatRepo "d-im/internal/chat/repository"
+	chatSvc "d-im/internal/chat/service"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -22,7 +22,7 @@ const defaultMaxMembers = 100
 
 type GroupService struct {
 	db              *mongo.Database
-	chatRepo        *chatRepo.ChatRepo
+	chats           *chatSvc.ChatService
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
 	convMgr         *model.ConversationManager
@@ -36,13 +36,13 @@ type groupAvatarGenerator interface {
 	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
 }
 
-func NewGroupService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
+func NewGroupService(db *mongo.Database, chats *chatSvc.ChatService, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
 	return &GroupService{
-		db:       db,
-		chatRepo: chatRepo,
-		groups:   groupRepo,
-		members:  memberRepo,
-		convMgr:  convMgr,
+		db:      db,
+		chats:   chats,
+		groups:  groupRepo,
+		members: memberRepo,
+		convMgr: convMgr,
 	}
 }
 
@@ -82,10 +82,10 @@ func (s *GroupService) ensureCapacity(group *model.Group, adding int) error {
 }
 
 func (s *GroupService) currentChatLastSeq(ctx context.Context, chatID string) (int64, error) {
-	if s.chatRepo == nil {
+	if s.chats == nil {
 		return 0, nil
 	}
-	chat, err := s.chatRepo.FindByChatID(ctx, chatID)
+	chat, err := s.chats.GetChat(ctx, chatID)
 	if err != nil {
 		return 0, err
 	}
@@ -151,7 +151,7 @@ func (s *GroupService) defaultGroupName(ctx context.Context, memberUIDs []string
 
 // createGroupInternal 创建群的核心逻辑，用于事务内部。
 func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID string, allMembers []string, maxMembers int) (*model.Group, error) {
-	chat, err := s.chatRepo.CreateGroupChat(ctx, ownerUID)
+	chat, err := s.chats.CreateGroupChat(ctx, ownerUID)
 	if err != nil {
 		return nil, err
 	}

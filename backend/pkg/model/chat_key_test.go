@@ -4,6 +4,9 @@ import (
 	"errors"
 	"regexp"
 	"testing"
+	"time"
+
+	"d-im/pkg/types"
 )
 
 func TestNewSingleChatKeyIsSymmetric(t *testing.T) {
@@ -20,6 +23,34 @@ func TestNewSingleChatKeyIsSymmetric(t *testing.T) {
 	}
 	if matched, _ := regexp.MatchString(`^[0-9a-f]{64}$`, forward); !matched {
 		t.Fatalf("key is not an unprefixed SHA-256 value: %q", forward)
+	}
+}
+
+func TestNewSingleChatBuildsCanonicalEntity(t *testing.T) {
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	chat, err := NewSingleChat("user-b", "user-a", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat.ChatType != types.ChatTypeSingle || chat.SingleKey == "" {
+		t.Fatalf("unexpected chat: %+v", chat)
+	}
+	if len(chat.Members) != 2 || chat.Members[0] != "user-a" || chat.Members[1] != "user-b" {
+		t.Fatalf("members are not canonical: %v", chat.Members)
+	}
+	if chat.MemberCount != 2 || chat.CreatedAt != now || chat.UpdatedAt != now {
+		t.Fatalf("unexpected defaults: %+v", chat)
+	}
+}
+
+func TestNewGroupChatBuildsMessageContainer(t *testing.T) {
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	chat, err := NewGroupChat("owner", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat.ChatType != types.ChatTypeGroup || chat.CreatedBy != "owner" || chat.ChatID == "" {
+		t.Fatalf("unexpected chat: %+v", chat)
 	}
 }
 

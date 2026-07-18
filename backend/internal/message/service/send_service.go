@@ -90,14 +90,11 @@ var ErrChatRepoRequired = fmt.Errorf("chat repository is required")
 // Content 使用 json.RawMessage 以支持 NATS 序列化/反序列化。
 type SendMessageReq struct {
 	ChatID      string            `json:"chat_id"`
-	ChatType    types.ChatType    `json:"chat_type"`
 	SenderID    string            `json:"sender_id"`
-	SenderName  string            `json:"sender_name"`
 	MsgType     types.MessageType `json:"msg_type"`
 	Content     json.RawMessage   `json:"content"`
 	ClientMsgID string            `json:"client_message_id,omitempty"`
 	ClientTime  time.Time         `json:"client_time"`
-	TargetUIDs  []string          `json:"target_uids,omitempty"`
 	QuoteMsgID  string            `json:"quote_msg_id,omitempty"`
 }
 
@@ -178,7 +175,15 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	if s.chatRepo == nil {
 		return nil, ErrChatRepoRequired
 	}
-	if err := s.checkSendPermission(ctx, req); err != nil {
+	chat, err := s.chatRepo.FindByChatID(ctx, req.ChatID)
+	if err != nil {
+		return nil, fmt.Errorf("find chat: %w", err)
+	}
+	if err := s.checkSendPermission(ctx, chat, req.SenderID, req.MsgType); err != nil {
+		return nil, err
+	}
+	targetUIDs, err := s.resolveRecipients(ctx, chat, req.SenderID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -192,31 +197,12 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	if clientTime.IsZero() {
 		clientTime = now
 	}
-	targetUIDs := req.TargetUIDs
-	if len(targetUIDs) == 0 {
-		var members []string
-		if req.ChatType == types.ChatTypeGroup {
-			if s.groups == nil {
-				return nil, fmt.Errorf("group reader is required")
-			}
-			members, err = s.groups.GetMemberUIDs(ctx, req.ChatID)
-			if err != nil {
-				return nil, fmt.Errorf("get group members: %w", err)
-			}
-		} else if s.chatRepo != nil {
-			members, err = s.chatRepo.GetMembers(ctx, req.ChatID)
-			if err != nil {
-				return nil, fmt.Errorf("get chat members: %w", err)
-			}
-		}
-		targetUIDs = excludeUID(members, req.SenderID)
-	}
-	senderName := s.senderDisplayName(ctx, req.SenderID, req.SenderName)
+	senderName := s.senderDisplayName(ctx, req.SenderID)
 
 	msg := &model.Message{
 		MsgID:          msgID,
 		ChatID:         req.ChatID,
-		ChatType:       req.ChatType,
+		ChatType:       chat.ChatType,
 		Seq:            msgSeq,
 		ClientMsgID:    req.ClientMsgID,
 		SenderID:       req.SenderID,
@@ -290,19 +276,26 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	}, nil
 }
 
-func (s *MessageService) checkSendPermission(ctx context.Context, req *SendMessageReq) error {
-	if req == nil || req.ChatID == "" {
-		return nil
+func (s *MessageService) checkSendPermission(ctx context.Context, chat *model.Chat, senderID string, messageType types.MessageType) error {
+	if chat == nil {
+		return fmt.Errorf("chat is required")
 	}
-	chat, err := s.chatRepo.FindByChatID(ctx, req.ChatID)
-	if err != nil {
-		return err
-	}
-	if req.ChatType == types.ChatTypeGroup || chat.ChatType == types.ChatTypeGroup {
+	switch chat.ChatType {
+	case types.ChatTypeSingle:
+		for _, memberID := range chat.Members {
+			if memberID == senderID {
+				return nil
+			}
+		}
+		return fmt.Errorf("%w: sender is not chat member", ErrForbidden)
+	case types.ChatTypeGroup:
+		if messageType == types.MessageTypeSystemEvent {
+			return nil
+		}
 		if s.groups == nil {
 			return fmt.Errorf("group reader is required")
 		}
-		allowed, reason, err := s.groups.CheckPermission(ctx, req.ChatID, req.SenderID, "send_message")
+		allowed, reason, err := s.groups.CheckPermission(ctx, chat.ChatID, senderID, "send_message")
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				return fmt.Errorf("%w: sender is not group member", ErrForbidden)
@@ -312,8 +305,30 @@ func (s *MessageService) checkSendPermission(ctx context.Context, req *SendMessa
 		if !allowed {
 			return fmt.Errorf("%w: %s", ErrForbidden, reason)
 		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported chat type: %s", chat.ChatType)
 	}
-	return nil
+}
+
+func (s *MessageService) resolveRecipients(ctx context.Context, chat *model.Chat, senderID string) ([]string, error) {
+	var members []string
+	var err error
+	switch chat.ChatType {
+	case types.ChatTypeSingle:
+		members = chat.Members
+	case types.ChatTypeGroup:
+		if s.groups == nil {
+			return nil, fmt.Errorf("group reader is required")
+		}
+		members, err = s.groups.GetMemberUIDs(ctx, chat.ChatID)
+		if err != nil {
+			return nil, fmt.Errorf("get group members: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported chat type: %s", chat.ChatType)
+	}
+	return excludeUID(members, senderID), nil
 }
 
 func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMessageReq) (*SendMessageResp, error) {

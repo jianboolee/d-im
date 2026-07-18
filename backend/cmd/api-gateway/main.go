@@ -13,6 +13,7 @@ import (
 	"time"
 
 	chatRepo "d-im/internal/chat/repository"
+	chatSvc "d-im/internal/chat/service"
 	convSvc "d-im/internal/conversation/service"
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
@@ -82,10 +83,11 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	convMgr := model.NewConversationManager(db)
 	chatR := chatRepo.NewChatRepo(db)
+	chatService := chatSvc.NewChatService(chatR)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	uRepo := userRepo.NewUserRepo(db)
-	groupService := groupSvc.NewGroupService(db, chatR, gRepo, mRepo, convMgr)
+	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convMgr)
 	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convMgr)
 	groupService.SetMaxMembers(cfg.Group.MaxMembers)
 	memberService.SetMaxMembers(cfg.Group.MaxMembers)
@@ -98,7 +100,7 @@ func main() {
 	}
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
-	conversationSvc := convSvc.NewConversationService(convMgr, chatR)
+	conversationSvc := convSvc.NewConversationService(convMgr, chatService)
 
 	// === message dispatcher（原 message 服务）===
 	d := dispatcher.NewDispatcher(msgRepo, 4)

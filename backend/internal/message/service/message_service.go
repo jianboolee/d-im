@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	chatRepo "d-im/internal/chat/repository"
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
@@ -16,7 +15,7 @@ var ErrForbidden = errors.New("forbidden")
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
 	repo     *repository.MessageRepo
-	chatRepo *chatRepo.ChatRepo
+	chatRepo messageChatRepository
 	groups   messageGroupReader
 	users    messageUserReader
 	convMgr  *model.ConversationManager
@@ -28,12 +27,17 @@ type messageGroupReader interface {
 	CheckPermission(ctx context.Context, chatID, uid, action string) (bool, string, error)
 }
 
+type messageChatRepository interface {
+	FindByChatID(ctx context.Context, chatID string) (*model.Chat, error)
+	NextMessageSeq(ctx context.Context, chatID string) (int64, error)
+}
+
 type messageUserReader interface {
 	FindByID(ctx context.Context, id string) (*model.User, error)
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, chatRepo *chatRepo.ChatRepo, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, chatRepo messageChatRepository, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
 		repo:     repo,
 		chatRepo: chatRepo,
@@ -50,11 +54,7 @@ func (s *MessageService) SetUserReader(users messageUserReader) {
 	s.users = users
 }
 
-func (s *MessageService) senderDisplayName(ctx context.Context, senderID, fallback string) string {
-	fallback = strings.TrimSpace(fallback)
-	if fallback != "" {
-		return fallback
-	}
+func (s *MessageService) senderDisplayName(ctx context.Context, senderID string) string {
 	if s == nil || s.users == nil || strings.TrimSpace(senderID) == "" {
 		return ""
 	}

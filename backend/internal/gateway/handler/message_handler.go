@@ -47,7 +47,6 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	var raw struct {
 		ChatID          string            `json:"chat_id"`
-		ConversationID  string            `json:"conversation_id,omitempty"`
 		MessageType     types.MessageType `json:"message_type"`
 		Content         json.RawMessage   `json:"content"`
 		ClientMessageID string            `json:"client_message_id,omitempty"`
@@ -57,9 +56,6 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
-	}
-	if raw.ChatID == "" && raw.ConversationID != "" {
-		raw.ChatID = raw.ConversationID
 	}
 	if raw.ChatID == "" {
 		writeError(w, http.StatusBadRequest, 400008, "chat_id is required")
@@ -72,24 +68,6 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if raw.MessageType == types.MessageTypeSystemEvent {
 		writeError(w, http.StatusForbidden, 403001, "system_event cannot be sent by clients")
 		return
-	}
-
-	// 通过 chat_id 查找用户的会话视图，获取 ChatType 并验证用户归属
-	var chatType types.ChatType
-	if h.convSvc != nil {
-		conv, err := h.convSvc.GetConversationByChatID(r.Context(), uid, raw.ChatID)
-		if err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
-				writeError(w, http.StatusNotFound, 404001, "conversation not found")
-				return
-			}
-		}
-		if conv != nil {
-			chatType = conv.ChatType
-		}
-	}
-	if chatType == "" {
-		chatType = types.ChatTypeSingle // 默认单聊
 	}
 
 	content, err := parseContent(raw.MessageType, raw.Content)
@@ -116,7 +94,6 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	req := &messageSvc.SendMessageReq{
 		ChatID:      raw.ChatID,
-		ChatType:    chatType,
 		SenderID:    uid,
 		MsgType:     raw.MessageType,
 		Content:     contentBytes,
