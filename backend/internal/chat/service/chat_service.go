@@ -9,6 +9,7 @@ import (
 
 // Repository 定义 Chat 领域服务需要的持久化端口。
 type Repository interface {
+	WithTransaction(ctx context.Context, fn func(context.Context) error) error
 	InsertOrGetSingle(ctx context.Context, candidate *model.Chat) (*model.Chat, error)
 	Insert(ctx context.Context, chat *model.Chat) error
 	FindByChatID(ctx context.Context, chatID string) (*model.Chat, error)
@@ -36,14 +37,19 @@ func (s *ChatService) EnsureSingleChat(ctx context.Context, userID, peerUserID s
 	if err != nil {
 		return nil, err
 	}
-	chat, err := s.repository.InsertOrGetSingle(ctx, candidate)
+	var chat *model.Chat
+	err = s.repository.WithTransaction(ctx, func(txCtx context.Context) error {
+		chat, err = s.repository.InsertOrGetSingle(txCtx, candidate)
+		if err != nil {
+			return err
+		}
+		if s.conversations != nil {
+			return s.conversations.EnsureUsers(txCtx, chat.Members, chat)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	if s.conversations != nil {
-		if err := s.conversations.EnsureUsers(ctx, chat.Members, chat); err != nil {
-			return nil, err
-		}
 	}
 	return chat, nil
 }

@@ -14,6 +14,7 @@ import (
 
 	chatRepo "d-im/internal/chat/repository"
 	chatSvc "d-im/internal/chat/service"
+	conversationOutbox "d-im/internal/conversation/outbox"
 	conversationProjector "d-im/internal/conversation/projector"
 	conversationRepo "d-im/internal/conversation/repository"
 	convSvc "d-im/internal/conversation/service"
@@ -58,6 +59,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("mongodb: %v", err)
 	}
+	if err := mongodb.EnsureIndexes(ctx, db); err != nil {
+		log.Fatalf("ensure mongodb indexes: %v", err)
+	}
 
 	accessExpire, _ := time.ParseDuration(cfg.JWT.AccessExpire)
 	refreshExpire, _ := time.ParseDuration(cfg.JWT.RefreshExpire)
@@ -84,16 +88,18 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	convRepo := conversationRepo.NewConversationRepo(db)
 	convProjector := conversationProjector.NewConversationProjector(convRepo)
+	convOutboxRepo := conversationOutbox.NewRepository(db)
+	convEvents := conversationOutbox.NewPublisher(convOutboxRepo)
 	chatR := chatRepo.NewChatRepo(db)
-	chatService := chatSvc.NewChatService(chatR, convProjector)
+	chatService := chatSvc.NewChatService(chatR, convEvents)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	uRepo := userRepo.NewUserRepo(db)
-	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convProjector)
-	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convProjector)
+	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convEvents)
+	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convEvents)
 	groupService.SetMaxMembers(cfg.Group.MaxMembers)
 	memberService.SetMaxMembers(cfg.Group.MaxMembers)
-	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convRepo, convProjector, natsPub)
+	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convRepo, convProjector, convEvents, natsPub)
 	msgSvc.SetGroupReader(groupService)
 	msgSvc.SetUserReader(uRepo)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
@@ -158,6 +164,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go conversationOutbox.NewWorker(convOutboxRepo, convProjector).Run(ctx)
 
 	go func() {
 		if err := server.Start(ctx); err != nil {

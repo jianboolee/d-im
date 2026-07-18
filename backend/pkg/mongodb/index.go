@@ -107,6 +107,16 @@ func CreateIndexes(ctx context.Context, db *mongo.Database) error {
 		return err
 	}
 
+	outboxIndexes := []mongo.IndexModel{
+		{Keys: bson.D{{Key: "event_id", Value: 1}}, Options: options.Index().SetName("idx_event_id").SetUnique(true)},
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "next_attempt_at", Value: 1}, {Key: "created_at", Value: 1}}, Options: options.Index().SetName("idx_outbox_pending")},
+		{Keys: bson.D{{Key: "aggregate_id", Value: 1}, {Key: "created_at", Value: 1}}, Options: options.Index().SetName("idx_outbox_aggregate")},
+		{Keys: bson.D{{Key: "processed_at", Value: 1}}, Options: options.Index().SetName("idx_outbox_processed_ttl").SetExpireAfterSeconds(7 * 24 * 3600)},
+	}
+	if _, err := db.Collection(CollectionConversationOutbox).Indexes().CreateMany(ctx, outboxIndexes); err != nil {
+		return err
+	}
+
 	// UserMailbox集合索引
 	mailboxIndexes := []mongo.IndexModel{
 		{

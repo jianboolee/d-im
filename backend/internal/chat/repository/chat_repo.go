@@ -14,12 +14,17 @@ import (
 
 // ChatRepo 封装 chats 集合读写。
 type ChatRepo struct {
+	db   *mongo.Database
 	coll *mongo.Collection
 }
 
 // NewChatRepo 创建 ChatRepo。
 func NewChatRepo(db *mongo.Database) *ChatRepo {
-	return &ChatRepo{coll: db.Collection(mongodb.CollectionChats)}
+	return &ChatRepo{db: db, coll: db.Collection(mongodb.CollectionChats)}
+}
+
+func (r *ChatRepo) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
+	return mongodb.WithRequiredTransaction(ctx, r.db, fn)
 }
 
 // Collection 返回底层 MongoDB 集合（用于事务等场景）。

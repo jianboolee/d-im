@@ -7,7 +7,6 @@ import (
 	"time"
 
 	chatRepo "d-im/internal/chat/repository"
-	conversationProjector "d-im/internal/conversation/projector"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -23,14 +22,14 @@ type MemberService struct {
 	chatRepo        *chatRepo.ChatRepo
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
-	conversations   *conversationProjector.ConversationProjector
+	conversations   conversationProjectionWriter
 	avatarGenerator groupAvatarGenerator
 	eventPublisher  *EventPublisher
 	maxMembers      int
 }
 
 // NewMemberService 创建成员服务。
-func NewMemberService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, conversations *conversationProjector.ConversationProjector) *MemberService {
+func NewMemberService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, conversations conversationProjectionWriter) *MemberService {
 	return &MemberService{
 		db:            db,
 		chatRepo:      chatRepo,
@@ -132,7 +131,7 @@ func (s *MemberService) maybeGenerateGroupAvatarAsync(chatID string, beforeMembe
 func (s *MemberService) JoinGroup(ctx context.Context, chatID, uid string) (*model.Group, error) {
 	var result *model.Group
 	var beforeMemberUIDs []string
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		uids, err := s.members.ListUIDs(ctx, chatID)
 		if err != nil {
 			return err
@@ -207,7 +206,7 @@ func (s *MemberService) AddMembers(ctx context.Context, chatID, operatorUID stri
 	var result *model.Group
 	var addedUIDs []string
 	var beforeMemberUIDs []string
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		uids, err := s.members.ListUIDs(ctx, chatID)
 		if err != nil {
 			return err
@@ -295,7 +294,7 @@ func (s *MemberService) LeaveGroup(ctx context.Context, chatID, uid string) (*mo
 	var result *model.Group
 	var beforeMemberUIDs []string
 	var ownerTransferredTo string
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		uids, err := s.members.ListUIDs(ctx, chatID)
 		if err != nil {
 			return err
@@ -380,7 +379,7 @@ func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid stri
 func (s *MemberService) KickMember(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	var result *model.Group
 	var beforeMemberUIDs []string
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		uids, err := s.members.ListUIDs(ctx, chatID)
 		if err != nil {
 			return err
@@ -481,7 +480,7 @@ func (s *MemberService) SetMemberRole(ctx context.Context, chatID, operatorUID, 
 // TransferOwner 转让群主（事务包裹）。
 func (s *MemberService) TransferOwner(ctx context.Context, chatID, operatorUID, targetUID string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		group, err := s.transferOwnerInternal(ctx, chatID, operatorUID, targetUID)
 		if err != nil {
 			return err
@@ -534,7 +533,7 @@ func (s *MemberService) transferOwnerInternal(ctx context.Context, chatID, opera
 // DismissGroup 解散群（事务包裹）。
 func (s *MemberService) DismissGroup(ctx context.Context, chatID, operatorUID string) (*model.Group, error) {
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		group, err := s.dismissGroupInternal(ctx, chatID, operatorUID)
 		if err != nil {
 			return err

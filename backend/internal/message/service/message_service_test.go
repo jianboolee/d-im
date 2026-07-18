@@ -29,7 +29,7 @@ func (r fakeMessageGroupReader) CheckPermission(context.Context, string, string,
 }
 
 func TestSenderDisplayNameResolvesUserNickname(t *testing.T) {
-	svc := NewMessageService(nil, nil, nil, nil, nil)
+	svc := NewMessageService(nil, nil, nil, nil, nil, nil)
 	svc.SetUserReader(fakeMessageUserReader{
 		"user_a": {ID: "user_a", Nickname: "Alice"},
 	})
@@ -43,7 +43,7 @@ func TestSenderDisplayNameResolvesUserNickname(t *testing.T) {
 }
 
 func TestSingleChatPermissionAndRecipientsComeFromChat(t *testing.T) {
-	svc := NewMessageService(nil, nil, nil, nil, nil)
+	svc := NewMessageService(nil, nil, nil, nil, nil, nil)
 	chat := &model.Chat{
 		ChatID:   "chat-id",
 		ChatType: types.ChatTypeSingle,
@@ -66,7 +66,7 @@ func TestSingleChatPermissionAndRecipientsComeFromChat(t *testing.T) {
 }
 
 func TestGroupChatUsesGroupPolicyAndMembership(t *testing.T) {
-	svc := NewMessageService(nil, nil, nil, nil, nil)
+	svc := NewMessageService(nil, nil, nil, nil, nil, nil)
 	svc.SetGroupReader(fakeMessageGroupReader{
 		members: []string{"user-a", "user-b", "user-c"},
 		allowed: true,

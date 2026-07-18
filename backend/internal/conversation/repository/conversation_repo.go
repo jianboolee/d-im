@@ -156,11 +156,25 @@ func (r *ConversationRepo) FindByUIDAndChatID(ctx context.Context, uid, chatID s
 }
 
 func (r *ConversationRepo) UpdateLastMessage(ctx context.Context, uid, chatID string, lastMsg *types.LastMessage) error {
-	_, err := r.coll.UpdateOne(ctx, bson.M{"uid": uid, "chat_id": chatID}, bson.M{
+	result, err := r.coll.UpdateOne(ctx, bson.M{
+		"uid": uid, "chat_id": chatID, "left_at": bson.M{"$exists": false},
+		"$or": bson.A{bson.M{"last_msg.seq": bson.M{"$lt": lastMsg.Seq}}, bson.M{"last_msg.seq": bson.M{"$exists": false}}},
+	}, bson.M{
 		"$set": bson.M{"last_msg": lastMsg, "updated_at": time.Now()},
-		"$inc": bson.M{"total_msg_count": 1},
+		"$max": bson.M{"total_msg_count": lastMsg.Seq},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		// An already-applied or newer sequence is a successful idempotent replay.
+		var existing model.Conversation
+		if err := r.coll.FindOne(ctx, bson.M{"uid": uid, "chat_id": chatID, "last_msg.seq": bson.M{"$gte": lastMsg.Seq}}).Decode(&existing); err == nil {
+			return nil
+		}
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (r *ConversationRepo) MarkRead(ctx context.Context, uid, chatID string, seq int64) error {

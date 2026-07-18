@@ -9,7 +9,6 @@ import (
 	"time"
 
 	chatSvc "d-im/internal/chat/service"
-	conversationProjector "d-im/internal/conversation/projector"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -26,7 +25,7 @@ type GroupService struct {
 	chats           *chatSvc.ChatService
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
-	conversations   *conversationProjector.ConversationProjector
+	conversations   conversationProjectionWriter
 	avatarGenerator groupAvatarGenerator
 	users           UserProfileReader
 	eventPublisher  *EventPublisher
@@ -37,7 +36,7 @@ type groupAvatarGenerator interface {
 	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
 }
 
-func NewGroupService(db *mongo.Database, chats *chatSvc.ChatService, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, conversations *conversationProjector.ConversationProjector) *GroupService {
+func NewGroupService(db *mongo.Database, chats *chatSvc.ChatService, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, conversations conversationProjectionWriter) *GroupService {
 	return &GroupService{
 		db:            db,
 		chats:         chats,
@@ -109,7 +108,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, name, ownerUID string, m
 	maxMembers := s.effectiveMaxMembers()
 
 	var result *model.Group
-	err := mongodb.WithTransaction(ctx, s.db, func(ctx context.Context) error {
+	err := mongodb.WithRequiredTransaction(ctx, s.db, func(ctx context.Context) error {
 		group, err := s.createGroupInternal(ctx, name, ownerUID, allMembers, maxMembers)
 		if err != nil {
 			return err

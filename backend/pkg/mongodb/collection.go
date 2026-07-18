@@ -4,6 +4,7 @@ package mongodb
 const (
 	CollectionMessages      = "messages"
 	CollectionConversations = "conversations"
+	CollectionConversationOutbox = "conversation_outbox"
 	CollectionUserMailbox   = "user_mailbox"
 	CollectionChats         = "chats"
 	CollectionGroups        = "groups"

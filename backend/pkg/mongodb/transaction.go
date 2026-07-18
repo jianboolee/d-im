@@ -32,6 +32,22 @@ func WithTransaction(ctx context.Context, db *mongo.Database, fn func(ctx contex
 	return err
 }
 
+// WithRequiredTransaction executes fn atomically and never falls back to
+// sequential writes. Use it for business-write + outbox guarantees.
+func WithRequiredTransaction(ctx context.Context, db *mongo.Database, fn func(ctx context.Context) error) error {
+	session, err := db.Client().StartSession()
+	if err != nil {
+		return err
+	}
+	defer session.EndSession(ctx)
+	txnCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err = session.WithTransaction(txnCtx, func(sc mongo.SessionContext) (interface{}, error) {
+		return nil, fn(sc)
+	})
+	return err
+}
+
 // isTransactionNotSupported 判断错误是否因 MongoDB 不支持事务导致。
 func isTransactionNotSupported(err error) bool {
 	if err == nil {

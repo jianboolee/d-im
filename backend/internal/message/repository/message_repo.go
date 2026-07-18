@@ -18,6 +18,7 @@ import (
 
 // MessageRepo 消息数据访问层
 type MessageRepo struct {
+	db           *mongo.Database
 	messagesColl *mongo.Collection
 	mailboxColl  *mongo.Collection
 }
@@ -29,9 +30,14 @@ type MessageCursor struct {
 // NewMessageRepo 创建消息仓储
 func NewMessageRepo(db *mongo.Database) *MessageRepo {
 	return &MessageRepo{
+		db:           db,
 		messagesColl: db.Collection(mongodb.CollectionMessages),
 		mailboxColl:  db.Collection(mongodb.CollectionUserMailbox),
 	}
+}
+
+func (r *MessageRepo) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
+	return mongodb.WithRequiredTransaction(ctx, r.db, fn)
 }
 
 // Insert 插入消息

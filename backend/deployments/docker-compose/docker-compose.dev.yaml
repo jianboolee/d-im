@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   mongo:
     image: mongodb/mongodb-community-server:8.0-ubi9-slim
@@ -10,6 +8,20 @@ services:
       - im_mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: im_db
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  mongo-init:
+    image: mongodb/mongodb-community-server:8.0-ubi9-slim
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["mongosh", "--host", "mongo:27017", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }"]
 
   redis:
     image: redis:8-alpine

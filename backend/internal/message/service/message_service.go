@@ -10,19 +10,21 @@ import (
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
+	"d-im/pkg/types"
 )
 
 var ErrForbidden = errors.New("forbidden")
 
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
-	repo          *repository.MessageRepo
-	chatRepo      messageChatRepository
-	groups        messageGroupReader
-	users         messageUserReader
-	conversations *conversationRepo.ConversationRepo
-	projector     *conversationProjector.ConversationProjector
-	natsPub       *natsq.Publisher
+	repo             *repository.MessageRepo
+	chatRepo         messageChatRepository
+	groups           messageGroupReader
+	users            messageUserReader
+	conversations    *conversationRepo.ConversationRepo
+	projector        *conversationProjector.ConversationProjector
+	projectionEvents messageProjectionPublisher
+	natsPub          *natsq.Publisher
 }
 
 type messageGroupReader interface {
@@ -39,14 +41,19 @@ type messageUserReader interface {
 	FindByID(ctx context.Context, id string) (*model.User, error)
 }
 
+type messageProjectionPublisher interface {
+	MessageSent(ctx context.Context, participantIDs []string, senderID string, msg *model.Message, lastMsg *types.LastMessage) error
+}
+
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, chatRepo messageChatRepository, conversations *conversationRepo.ConversationRepo, projector *conversationProjector.ConversationProjector, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, chatRepo messageChatRepository, conversations *conversationRepo.ConversationRepo, projector *conversationProjector.ConversationProjector, projectionEvents messageProjectionPublisher, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
-		repo:          repo,
-		chatRepo:      chatRepo,
-		conversations: conversations,
-		projector:     projector,
-		natsPub:       natsPub,
+		repo:             repo,
+		chatRepo:         chatRepo,
+		conversations:    conversations,
+		projector:        projector,
+		projectionEvents: projectionEvents,
+		natsPub:          natsPub,
 	}
 }
 

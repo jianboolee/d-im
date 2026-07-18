@@ -800,6 +800,20 @@ export enum MessageType {
       return normalizeConversation(data);
     }
 
+    async waitForConversationByChatId(chatId: string, timeoutMs = 3000): Promise<Conversation> {
+	  const deadline = Date.now() + timeoutMs;
+	  let lastError: unknown;
+	  do {
+		try {
+		  return await this.getConversationByChatId(chatId);
+		} catch (error) {
+		  lastError = error;
+		  await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	  } while (Date.now() < deadline);
+	  throw lastError;
+	}
+
     async ensureSingleChat(peerUserId: string): Promise<Chat> {
 	  return apiRequest<Chat>(
         this.baseURL,

@@ -230,7 +230,21 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		}
 	}
 
-	if err := s.repo.Insert(ctx, msg); err != nil {
+	lastMsg := &types.LastMessage{
+		MsgID: msg.MsgID, Seq: msg.Seq, SenderID: msg.SenderID, SenderName: msg.SenderName,
+		MsgType: msg.MsgType, ContentPreview: msg.ContentPreview, ClientTime: msg.ClientTime,
+	}
+	participantUIDs := uniqueUIDs(append([]string{req.SenderID}, targetUIDs...))
+	err = s.repo.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.repo.Insert(txCtx, msg); err != nil {
+			return err
+		}
+		if s.projectionEvents != nil {
+			return s.projectionEvents.MessageSent(txCtx, participantUIDs, req.SenderID, msg, lastMsg)
+		}
+		return nil
+	})
+	if err != nil {
 		if mongo.IsDuplicateKeyError(err) && req.ClientMsgID != "" {
 			return s.existingSendResponse(ctx, req)
 		}
@@ -242,22 +256,6 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		return nil, fmt.Errorf("distribute mailbox: %w", err)
 	}
 	senderMailbox := mailboxByUID[req.SenderID]
-
-	if s.projector != nil {
-		lastMsg := &types.LastMessage{
-			MsgID:          msg.MsgID,
-			Seq:            msg.Seq,
-			SenderID:       msg.SenderID,
-			SenderName:     msg.SenderName,
-			MsgType:        msg.MsgType,
-			ContentPreview: msg.ContentPreview,
-			ClientTime:     msg.ClientTime,
-		}
-		participantUIDs := uniqueUIDs(append([]string{req.SenderID}, targetUIDs...))
-		if err := s.projector.MessageSent(ctx, participantUIDs, req.SenderID, msg, lastMsg); err != nil {
-			log.Printf("[send_service] project message failed: chat_id=%s msg_id=%s err=%v", msg.ChatID, msg.MsgID, err)
-		}
-	}
 
 	// 通过 NATS 发布推送事件，通知 connector。
 	// 推送目标以 mailbox 投递结果为准：异步发送模式下，发送端也需要通过

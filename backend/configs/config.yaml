@@ -19,7 +19,7 @@ server:
     tcp_port: 8082
 
 mongodb:
-  uri: mongodb://mongo:27017
+  uri: mongodb://mongo:27017/?replicaSet=rs0
   database: im_db
   pool_size: 100
   timeout: 10

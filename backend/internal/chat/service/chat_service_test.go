@@ -12,6 +12,10 @@ type repositoryStub struct {
 	inserted *model.Chat
 }
 
+func (r *repositoryStub) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
 type projectorStub struct {
 	userIDs []string
 	chat    *model.Chat
