@@ -1,13 +1,21 @@
 package model
 
 import (
-	"fmt"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
 	"sort"
 	"time"
 
 	"d-im/pkg/types"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+var (
+	ErrUserIDRequired     = errors.New("user ID is required")
+	ErrSingleChatWithSelf = errors.New("cannot create single chat with self")
 )
 
 // Chat 会话实体 - 消息会话的物理存在。
@@ -24,9 +32,27 @@ type Chat struct {
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
 }
 
-// GenerateSingleChatKey 生成单聊幂等键，仅用于唯一约束，不作为公开会话 ID。
-func GenerateSingleChatKey(uid1, uid2 string) string {
-	uids := []string{uid1, uid2}
-	sort.Strings(uids)
-	return fmt.Sprintf("%s:%s", uids[0], uids[1])
+// NewSingleChatKey 为两个不透明的第三方用户 ID 创建对称、无歧义的单聊唯一键。
+// 用户 ID 按原始字节处理，不做空白、大小写或 Unicode 归一化。
+func NewSingleChatKey(userID1, userID2 string) (string, error) {
+	if userID1 == "" || userID2 == "" {
+		return "", ErrUserIDRequired
+	}
+	if userID1 == userID2 {
+		return "", ErrSingleChatWithSelf
+	}
+
+	userIDs := []string{userID1, userID2}
+	sort.Strings(userIDs)
+
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("single-chat-key:v1"))
+	var length [8]byte
+	for _, userID := range userIDs {
+		binary.BigEndian.PutUint64(length[:], uint64(len(userID)))
+		_, _ = hash.Write(length[:])
+		_, _ = hash.Write([]byte(userID))
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

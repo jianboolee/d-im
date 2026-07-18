@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"time"
 
 	"d-im/pkg/model"
@@ -32,7 +30,10 @@ func (r *ChatRepo) Collection() *mongo.Collection {
 
 // CreateOrGetSingleChat 获取或创建单聊会话。
 func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*model.Chat, error) {
-	singleKey := generateSingleChatKey(uid1, uid2)
+	singleKey, err := model.NewSingleChatKey(uid1, uid2)
+	if err != nil {
+		return nil, err
+	}
 	chatID := model.NewChatID()
 	now := time.Now()
 
@@ -60,7 +61,10 @@ func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string)
 		SetReturnDocument(options.After)
 
 	var chat model.Chat
-	err := r.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
+	err = r.coll.FindOneAndUpdate(ctx, filter, update, opts).Decode(&chat)
+	if mongo.IsDuplicateKeyError(err) {
+		err = r.coll.FindOne(ctx, filter).Decode(&chat)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +123,4 @@ func (r *ChatRepo) NextMessageSeq(ctx context.Context, chatID string) (int64, er
 		return 0, err
 	}
 	return chat.LastSeq, nil
-}
-
-// generateSingleChatKey 生成单聊幂等键。
-func generateSingleChatKey(uid1, uid2 string) string {
-	uids := []string{uid1, uid2}
-	sort.Strings(uids)
-	return fmt.Sprintf("%s:%s", uids[0], uids[1])
 }
