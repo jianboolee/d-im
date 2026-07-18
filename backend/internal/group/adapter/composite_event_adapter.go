@@ -29,9 +29,17 @@ func (a *CompositeEventAdapter) PublishGroupSystemEvent(ctx context.Context, eve
 	if a.pub == nil || event.EventType == "" {
 		return nil
 	}
-	a.publishMessageSend(event)
+	if shouldPublishSystemMessage(event.EventType) {
+		a.publishMessageSend(event)
+	}
 	a.publishDomainEvent(event)
 	return nil
+}
+
+// Avatar updates are group metadata refreshes, not user-visible chat history.
+// They still travel through dim.group.* so clients can refresh the group view.
+func shouldPublishSystemMessage(eventType string) bool {
+	return eventType != groupSvc.EventTypeAvatarUpdated
 }
 
 func (a *CompositeEventAdapter) publishMessageSend(event groupSvc.GroupSystemEvent) {

@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -55,6 +56,7 @@ func (h *ChatHandler) EnsureSingleChat(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, 400007, err.Error())
 			return
 		}
+		log.Printf("[chat_handler] ensure single chat failed: user_id=%s peer_user_id=%s err=%v", uid, req.PeerUserID, err)
 		writeError(w, http.StatusInternalServerError, 500201, "ensure single chat failed")
 		return
 	}

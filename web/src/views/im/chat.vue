@@ -420,7 +420,7 @@ const canSubmitNewConversation = computed(() => {
   if (newConversationMode.value === 'single') {
     return Boolean(newConversationUserId.value.trim())
   }
-  return Boolean(parseUserIds(newGroupMemberIdsText.value).length > 0)
+  return true
 })
 
 const pageTitle = computed(() => conversationTitle.value || '消息')
@@ -551,6 +551,34 @@ const submitNewConversation = async () => {
   await createSingleConversation()
 }
 
+const openCreatedChat = async (
+  chatId: string,
+  loadConversation: () => Promise<Conversation>,
+  successMessage?: string,
+) => {
+  let detailLoaded = true
+  try {
+    upsertConversation(await loadConversation())
+  } catch (error) {
+    detailLoaded = false
+    console.error('加载新会话详情失败:', error)
+    showToast('会话已创建，详情加载失败，请稍后刷新')
+  }
+
+  showNewConversationModal.value = false
+  newConversationMode.value = 'single'
+  newConversationUserId.value = ''
+  newGroupName.value = ''
+  newGroupMemberIdsText.value = ''
+  try {
+    await router.replace({ name: 'im-chat', params: { chatId } })
+  } catch (error) {
+    console.error('打开新会话失败:', error)
+  }
+  requestScrollToConversation(chatId)
+  if (successMessage && detailLoaded) showToast(successMessage)
+}
+
 const createSingleConversation = async () => {
   const peerUserId = newConversationUserId.value.trim()
   if (!peerUserId || creatingConversation.value) return
@@ -570,13 +598,8 @@ const createSingleConversation = async () => {
   newConversationError.value = ''
 
   try {
-	const chat = await sdk.ensureSingleChat(peerUserId)
-	const nextConversation = await sdk.waitForConversationByChatId(chat.chat_id)
-    upsertConversation(nextConversation)
-    showNewConversationModal.value = false
-    newConversationUserId.value = ''
-    await router.replace({ name: 'im-chat', params: { chatId: nextConversation.chat_id } })
-    requestScrollToConversation(nextConversation.chat_id)
+    const chat = await sdk.ensureSingleChat(peerUserId)
+    await openCreatedChat(chat.chat_id, () => sdk.getConversationByChatId(chat.chat_id))
   } catch (error) {
     console.error('创建会话失败:', error)
     newConversationError.value = error instanceof Error ? error.message : '创建会话失败'
@@ -590,11 +613,6 @@ const createGroupConversation = async () => {
   const memberIds = parseUserIds(newGroupMemberIdsText.value)
     .filter((id) => id !== currentUserId.value)
   if (creatingConversation.value) return
-
-  if (memberIds.length === 0) {
-    newConversationError.value = '至少输入一个成员用户 ID'
-    return
-  }
 
   const sdk = imStore.imSDK ?? imStore.initSDK()
   if (!sdk) {
@@ -610,19 +628,12 @@ const createGroupConversation = async () => {
       name,
       member_user_ids: memberIds,
     })
-    const nextConversation = detail.conversation
-    if (!nextConversation?.id) {
-      throw new Error('创建群聊失败')
-    }
-    const fullConversation = await sdk.getConversation(nextConversation.id)
-    upsertConversation(fullConversation)
-    showNewConversationModal.value = false
-    newConversationMode.value = 'single'
-    newGroupName.value = ''
-    newGroupMemberIdsText.value = ''
-    await router.replace({ name: 'im-chat', params: { chatId: fullConversation.chat_id } })
-    requestScrollToConversation(fullConversation.chat_id)
-    showToast('群聊已创建')
+    const chatId = detail.group.id
+    await openCreatedChat(
+      chatId,
+      () => sdk.getConversationByChatId(chatId),
+      '群聊已创建',
+    )
   } catch (error) {
     console.error('创建群聊失败:', error)
     newConversationError.value = error instanceof Error ? error.message : '创建群聊失败'

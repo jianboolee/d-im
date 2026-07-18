@@ -127,7 +127,7 @@ export enum MessageType {
 
   export interface Group {
     id: string;
-    conversation_id: string;
+    conversation_id?: string;
     name: string;
     avatar_url?: string;
     owner_id: string;
@@ -155,7 +155,18 @@ export enum MessageType {
     group: Group;
     members?: GroupMember[];
     current_member?: GroupMember;
-    conversation?: Conversation;
+  }
+
+  export interface ConversationReference {
+    id: string;
+    conversation_id: string;
+    chat_id: string;
+    chat_type: string;
+  }
+
+  export interface CreateGroupResponse {
+    group: Group;
+    conversation: ConversationReference;
   }
 
   export interface GroupCreateRequest {
@@ -209,11 +220,11 @@ export enum MessageType {
   }
 
   export interface Chat {
-	chat_id: string;
-	chat_type: string;
-	member_user_ids: string[];
-	member_count: number;
-	created_at: string;
+    chat_id: string;
+    chat_type: string;
+    member_user_ids: string[];
+    member_count: number;
+    created_at: string;
   }
 
   export interface ConversationPage {
@@ -284,6 +295,17 @@ export enum MessageType {
 
   const SUCCESS_CODE = 0;
 
+  export class ApiError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly code?: number,
+    ) {
+      super(message)
+      this.name = 'ApiError'
+    }
+  }
+
   function unwrapApiResponse<T>(json: unknown): T {
     if (
       json &&
@@ -293,7 +315,7 @@ export enum MessageType {
     ) {
       const response = json as ApiResponse<T>;
       if (response.code !== SUCCESS_CODE) {
-        throw new Error(response.error || response.message || 'Request failed');
+        throw new ApiError(response.error || response.message || 'Request failed', 200, response.code);
       }
       return response.data;
     }
@@ -439,11 +461,15 @@ export enum MessageType {
       headers,
     });
 
+    const json = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(`Request failed: ${response.statusText}`);
+      const apiResponse = json as Partial<ApiResponse<unknown>> | null;
+      throw new ApiError(
+        apiResponse?.error || apiResponse?.message || `Request failed: ${response.statusText}`,
+        response.status,
+        apiResponse?.code,
+      );
     }
-
-    const json = await response.json();
     return unwrapApiResponse<T>(json);
   }
   
@@ -800,24 +826,10 @@ export enum MessageType {
       return normalizeConversation(data);
     }
 
-    async waitForConversationByChatId(chatId: string, timeoutMs = 3000): Promise<Conversation> {
-	  const deadline = Date.now() + timeoutMs;
-	  let lastError: unknown;
-	  do {
-		try {
-		  return await this.getConversationByChatId(chatId);
-		} catch (error) {
-		  lastError = error;
-		  await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-	  } while (Date.now() < deadline);
-	  throw lastError;
-	}
-
     async ensureSingleChat(peerUserId: string): Promise<Chat> {
-	  return apiRequest<Chat>(
+      return apiRequest<Chat>(
         this.baseURL,
-		'/api/v1/chats/single',
+        '/api/v1/chats/single',
         this.token,
         {
           method: 'POST',
@@ -826,8 +838,8 @@ export enum MessageType {
       );
     }
 
-    async createGroup(req: GroupCreateRequest): Promise<GroupDetailResponse> {
-      const detail = await apiRequest<GroupDetailResponse>(
+    async createGroup(req: GroupCreateRequest): Promise<CreateGroupResponse> {
+	  return apiRequest<CreateGroupResponse>(
         this.baseURL,
         '/api/v1/groups',
         this.token,
@@ -836,10 +848,6 @@ export enum MessageType {
           body: JSON.stringify(req),
         },
       );
-      if (detail.conversation) {
-        detail.conversation = normalizeConversation(detail.conversation as unknown as Record<string, unknown>);
-      }
-      return detail;
     }
 
     async getGroup(groupId: string): Promise<GroupDetailResponse> {

@@ -8,7 +8,7 @@ services:
       - im_mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: im_db
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    command: ["mongod", "--replSet", "rs0"]
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 2s

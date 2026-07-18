@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useIMStore } from '@/stores/im'
 import { useIMTabStore } from '@/stores/imTab'
 import { useUserStore } from '@/stores/user'
+import { ApiError } from '@/sdk/im'
 import type { Conversation, Message } from '@/sdk/im'
 import {
   applyIncomingMessage,
@@ -330,7 +331,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
       : false
 
     if (!knownConversation && message.chat_id) {
-      const conversation = await ensureConversationByChatId(message.chat_id)
+      const conversation = await ensureConversationByChatId(message.chat_id, true)
       knownConversation = Boolean(conversation)
     } else if (!knownConversation && message.conversation_id) {
       const conversation = await ensureConversationInList(message.conversation_id)
@@ -390,7 +391,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
     }
   }
 
-  async function ensureConversationByChatId(chatId: string) {
+  async function ensureConversationByChatId(chatId: string, waitForProjection = false) {
     if (!chatId) return null
 
     const existing = conversations.value.find((conversation) => conversation.chat_id === chatId)
@@ -402,7 +403,7 @@ export const useConversationListStore = defineStore('conversationList', () => {
       if (loaded) return loaded
     }
 
-    const cacheKey = `chat:${chatId}`
+    const cacheKey = `chat:${chatId}:${waitForProjection ? 'wait' : 'once'}`
     const pending = ensurePromises.get(cacheKey)
     if (pending) return pending
 
@@ -410,9 +411,20 @@ export const useConversationListStore = defineStore('conversationList', () => {
       const sdk = ensureImSDK()
       if (!sdk) return null
 
-      const conversation = await sdk.getConversationByChatId(chatId)
-      upsertConversation(conversation)
-      return conversation
+      const retryDelays = waitForProjection ? [0, 100, 200, 400, 800] : [0]
+      let lastError: unknown
+      for (const delay of retryDelays) {
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+        try {
+          const conversation = await sdk.getConversationByChatId(chatId)
+          upsertConversation(conversation)
+          return conversation
+        } catch (error) {
+          lastError = error
+          if (!(error instanceof ApiError) || error.status !== 404) throw error
+        }
+      }
+      throw lastError
     })()
 
     ensurePromises.set(cacheKey, promise)
