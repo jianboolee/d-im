@@ -7,6 +7,7 @@ import (
 	"time"
 
 	chatRepo "d-im/internal/chat/repository"
+	conversationProjector "d-im/internal/conversation/projector"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -22,20 +23,20 @@ type MemberService struct {
 	chatRepo        *chatRepo.ChatRepo
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
-	convMgr         *model.ConversationManager
+	conversations   *conversationProjector.ConversationProjector
 	avatarGenerator groupAvatarGenerator
 	eventPublisher  *EventPublisher
 	maxMembers      int
 }
 
 // NewMemberService 创建成员服务。
-func NewMemberService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, convMgr *model.ConversationManager) *MemberService {
+func NewMemberService(db *mongo.Database, chatRepo *chatRepo.ChatRepo, groups *repository.GroupRepo, members *repository.MemberRepo, conversations *conversationProjector.ConversationProjector) *MemberService {
 	return &MemberService{
-		db:       db,
-		chatRepo: chatRepo,
-		groups:   groups,
-		members:  members,
-		convMgr:  convMgr,
+		db:            db,
+		chatRepo:      chatRepo,
+		groups:        groups,
+		members:       members,
+		conversations: conversations,
 	}
 }
 
@@ -187,13 +188,13 @@ func (s *MemberService) joinGroupInternal(ctx context.Context, chatID, uid strin
 		if err != nil {
 			return nil, err
 		}
-		if s.convMgr != nil {
+		if s.conversations != nil {
 			lastReadSeq, err := s.currentChatLastSeq(ctx, chatID)
 			if err != nil {
 				return nil, err
 			}
-			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
-			if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
+			// project the membership fact into the user conversation view
+			if err := s.conversations.UserJoined(ctx, uid, chatID, types.ChatTypeGroup, lastReadSeq); err != nil {
 				return nil, err
 			}
 		}
@@ -258,7 +259,7 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 		return nil, nil, err
 	}
 	lastReadSeq := int64(0)
-	if s.convMgr != nil && len(adding) > 0 {
+	if s.conversations != nil && len(adding) > 0 {
 		var err error
 		lastReadSeq, err = s.currentChatLastSeq(ctx, chatID)
 		if err != nil {
@@ -278,9 +279,9 @@ func (s *MemberService) addMembersInternal(ctx context.Context, chatID, operator
 			if err != nil {
 				return nil, nil, err
 			}
-			if s.convMgr != nil {
-				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
-				if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
+			if s.conversations != nil {
+				// project the membership fact into the user conversation view
+				if err := s.conversations.UserJoined(ctx, uid, chatID, types.ChatTypeGroup, lastReadSeq); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -367,8 +368,8 @@ func (s *MemberService) leaveGroupInternal(ctx context.Context, chatID, uid stri
 			return nil, "", err
 		}
 	}
-	if s.convMgr != nil {
-		if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
+	if s.conversations != nil {
+		if err := s.conversations.UserLeft(ctx, uid, chatID); err != nil {
 			return nil, "", err
 		}
 	}
@@ -434,8 +435,8 @@ func (s *MemberService) kickMemberInternal(ctx context.Context, chatID, operator
 			return nil, err
 		}
 	}
-	if s.convMgr != nil {
-		if err := s.convMgr.MarkLeft(ctx, targetUID, chatID); err != nil {
+	if s.conversations != nil {
+		if err := s.conversations.UserLeft(ctx, targetUID, chatID); err != nil {
 			return nil, err
 		}
 	}
@@ -565,13 +566,13 @@ func (s *MemberService) dismissGroupInternal(ctx context.Context, chatID, operat
 	if err != nil {
 		return nil, err
 	}
-	if s.convMgr != nil {
+	if s.conversations != nil {
 		memberUIDs, uidsErr := s.members.ListUIDs(ctx, group.ChatID)
 		if uidsErr != nil {
 			return nil, uidsErr
 		}
 		for _, uid := range memberUIDs {
-			if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
+			if err := s.conversations.UserLeft(ctx, uid, chatID); err != nil {
 				return nil, err
 			}
 		}

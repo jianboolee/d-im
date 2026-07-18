@@ -14,6 +14,8 @@ import (
 
 	chatRepo "d-im/internal/chat/repository"
 	chatSvc "d-im/internal/chat/service"
+	conversationProjector "d-im/internal/conversation/projector"
+	conversationRepo "d-im/internal/conversation/repository"
 	convSvc "d-im/internal/conversation/service"
 	"d-im/internal/gateway"
 	"d-im/internal/gateway/handler"
@@ -30,7 +32,6 @@ import (
 	userRepo "d-im/internal/user/repository"
 	"d-im/pkg/config"
 	"d-im/pkg/crypto"
-	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
 	natsq "d-im/pkg/queue/nats"
 
@@ -81,17 +82,18 @@ func main() {
 	defer natsPub.Close()
 
 	msgRepo := repository.NewMessageRepo(db)
-	convMgr := model.NewConversationManager(db)
+	convRepo := conversationRepo.NewConversationRepo(db)
+	convProjector := conversationProjector.NewConversationProjector(convRepo)
 	chatR := chatRepo.NewChatRepo(db)
 	chatService := chatSvc.NewChatService(chatR)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	uRepo := userRepo.NewUserRepo(db)
-	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convMgr)
-	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convMgr)
+	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convProjector)
+	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convProjector)
 	groupService.SetMaxMembers(cfg.Group.MaxMembers)
 	memberService.SetMaxMembers(cfg.Group.MaxMembers)
-	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convMgr, natsPub)
+	msgSvc := messageSvc.NewMessageService(msgRepo, chatR, convRepo, convProjector, natsPub)
 	msgSvc.SetGroupReader(groupService)
 	msgSvc.SetUserReader(uRepo)
 	store, mediaStaticHandler, err := newMediaStorage(cfg)
@@ -100,7 +102,7 @@ func main() {
 	}
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
-	conversationSvc := convSvc.NewConversationService(convMgr, chatService)
+	conversationSvc := convSvc.NewConversationService(convRepo, convProjector, chatService)
 
 	// === message dispatcher（原 message 服务）===
 	d := dispatcher.NewDispatcher(msgRepo, 4)

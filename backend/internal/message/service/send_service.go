@@ -243,7 +243,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 	}
 	senderMailbox := mailboxByUID[req.SenderID]
 
-	if s.convMgr != nil {
+	if s.projector != nil {
 		lastMsg := &types.LastMessage{
 			MsgID:          msg.MsgID,
 			Seq:            msg.Seq,
@@ -254,10 +254,9 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 			ClientTime:     msg.ClientTime,
 		}
 		participantUIDs := uniqueUIDs(append([]string{req.SenderID}, targetUIDs...))
-		for _, uid := range participantUIDs {
-			_ = s.convMgr.UpdateLastMsg(ctx, uid, msg.ChatID, lastMsg)
+		if err := s.projector.MessageSent(ctx, participantUIDs, req.SenderID, msg, lastMsg); err != nil {
+			log.Printf("[send_service] project message failed: chat_id=%s msg_id=%s err=%v", msg.ChatID, msg.MsgID, err)
 		}
-		s.markSenderMessageRead(ctx, req.SenderID, msg)
 	}
 
 	// 通过 NATS 发布推送事件，通知 connector。
@@ -353,10 +352,10 @@ func (s *MessageService) existingSendResponse(ctx context.Context, req *SendMess
 }
 
 func (s *MessageService) markSenderMessageRead(ctx context.Context, senderID string, msg *model.Message) {
-	if s.convMgr == nil || senderID == "" || msg == nil || msg.Seq <= 0 {
+	if s.projector == nil || senderID == "" || msg == nil || msg.Seq <= 0 {
 		return
 	}
-	if err := s.convMgr.MarkRead(ctx, senderID, msg.ChatID, msg.Seq); err != nil {
+	if err := s.projector.MessageRead(ctx, senderID, msg.ChatID, msg.Seq); err != nil {
 		log.Printf("[send_service] mark sender message read failed: uid=%s chat_id=%s msg_id=%s seq=%d err=%v", senderID, msg.ChatID, msg.MsgID, msg.Seq, err)
 	}
 }
@@ -474,8 +473,8 @@ func sortedMailboxUIDs(mailboxByUID map[string]*model.UserMailbox) []string {
 
 func (s *MessageService) buildMessageEnvelope(ctx context.Context, uid string, msg *model.Message, mailbox *model.UserMailbox) (*wsEnvelope, error) {
 	var conv *model.Conversation
-	if s.convMgr != nil {
-		found, err := s.convMgr.FindByUIDAndChatID(ctx, uid, msg.ChatID)
+	if s.conversations != nil {
+		found, err := s.conversations.FindByUIDAndChatID(ctx, uid, msg.ChatID)
 		if err != nil && err != mongo.ErrNoDocuments {
 			return nil, err
 		}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	conversationProjector "d-im/internal/conversation/projector"
+	conversationRepo "d-im/internal/conversation/repository"
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
@@ -14,12 +16,13 @@ var ErrForbidden = errors.New("forbidden")
 
 // MessageService 消息服务（依赖注入容器）
 type MessageService struct {
-	repo     *repository.MessageRepo
-	chatRepo messageChatRepository
-	groups   messageGroupReader
-	users    messageUserReader
-	convMgr  *model.ConversationManager
-	natsPub  *natsq.Publisher
+	repo          *repository.MessageRepo
+	chatRepo      messageChatRepository
+	groups        messageGroupReader
+	users         messageUserReader
+	conversations *conversationRepo.ConversationRepo
+	projector     *conversationProjector.ConversationProjector
+	natsPub       *natsq.Publisher
 }
 
 type messageGroupReader interface {
@@ -37,12 +40,13 @@ type messageUserReader interface {
 }
 
 // NewMessageService 创建消息服务
-func NewMessageService(repo *repository.MessageRepo, chatRepo messageChatRepository, convMgr *model.ConversationManager, natsPub *natsq.Publisher) *MessageService {
+func NewMessageService(repo *repository.MessageRepo, chatRepo messageChatRepository, conversations *conversationRepo.ConversationRepo, projector *conversationProjector.ConversationProjector, natsPub *natsq.Publisher) *MessageService {
 	return &MessageService{
-		repo:     repo,
-		chatRepo: chatRepo,
-		convMgr:  convMgr,
-		natsPub:  natsPub,
+		repo:          repo,
+		chatRepo:      chatRepo,
+		conversations: conversations,
+		projector:     projector,
+		natsPub:       natsPub,
 	}
 }
 

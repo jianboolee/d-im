@@ -9,6 +9,7 @@ import (
 	"time"
 
 	chatSvc "d-im/internal/chat/service"
+	conversationProjector "d-im/internal/conversation/projector"
 	"d-im/internal/group/repository"
 	"d-im/pkg/model"
 	"d-im/pkg/mongodb"
@@ -25,7 +26,7 @@ type GroupService struct {
 	chats           *chatSvc.ChatService
 	groups          *repository.GroupRepo
 	members         *repository.MemberRepo
-	convMgr         *model.ConversationManager
+	conversations   *conversationProjector.ConversationProjector
 	avatarGenerator groupAvatarGenerator
 	users           UserProfileReader
 	eventPublisher  *EventPublisher
@@ -36,13 +37,13 @@ type groupAvatarGenerator interface {
 	GenerateAndStore(ctx context.Context, chatID string, memberUIDs []string) (string, error)
 }
 
-func NewGroupService(db *mongo.Database, chats *chatSvc.ChatService, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, convMgr *model.ConversationManager) *GroupService {
+func NewGroupService(db *mongo.Database, chats *chatSvc.ChatService, groupRepo *repository.GroupRepo, memberRepo *repository.MemberRepo, conversations *conversationProjector.ConversationProjector) *GroupService {
 	return &GroupService{
-		db:      db,
-		chats:   chats,
-		groups:  groupRepo,
-		members: memberRepo,
-		convMgr: convMgr,
+		db:            db,
+		chats:         chats,
+		groups:        groupRepo,
+		members:       memberRepo,
+		conversations: conversations,
 	}
 }
 
@@ -192,8 +193,8 @@ func (s *GroupService) createGroupInternal(ctx context.Context, name, ownerUID s
 		return nil, err
 	}
 
-	if s.convMgr != nil {
-		if err := s.convMgr.BatchCreate(ctx, allMembers, chat); err != nil {
+	if s.conversations != nil {
+		if err := s.conversations.EnsureUsers(ctx, allMembers, chat); err != nil {
 			return nil, err
 		}
 	}
@@ -321,7 +322,7 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 		return nil, nil, err
 	}
 	lastReadSeq := int64(0)
-	if s.convMgr != nil && len(adding) > 0 {
+	if s.conversations != nil && len(adding) > 0 {
 		var err error
 		lastReadSeq, err = s.currentChatLastSeq(ctx, chatID)
 		if err != nil {
@@ -341,9 +342,9 @@ func (s *GroupService) AddMembers(ctx context.Context, chatID, operatorUID strin
 			if err != nil {
 				return nil, nil, err
 			}
-			if s.convMgr != nil {
-				conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
-				if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
+			if s.conversations != nil {
+				// project the membership fact into the user conversation view
+				if err := s.conversations.UserJoined(ctx, uid, chatID, types.ChatTypeGroup, lastReadSeq); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -381,13 +382,13 @@ func (s *GroupService) JoinGroup(ctx context.Context, chatID, uid string) (*mode
 		if err != nil {
 			return nil, err
 		}
-		if s.convMgr != nil {
+		if s.conversations != nil {
 			lastReadSeq, err := s.currentChatLastSeq(ctx, chatID)
 			if err != nil {
 				return nil, err
 			}
-			conv := &model.Conversation{UID: uid, ChatID: chatID, ChatType: types.ChatTypeGroup, LastReadSeq: lastReadSeq}
-			if err := s.convMgr.CreateOrUpdate(ctx, conv); err != nil {
+			// project the membership fact into the user conversation view
+			if err := s.conversations.UserJoined(ctx, uid, chatID, types.ChatTypeGroup, lastReadSeq); err != nil {
 				return nil, err
 			}
 		}
@@ -426,8 +427,8 @@ func (s *GroupService) LeaveGroup(ctx context.Context, chatID, uid string) (*mod
 			return nil, err
 		}
 	}
-	if s.convMgr != nil {
-		if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
+	if s.conversations != nil {
+		if err := s.conversations.UserLeft(ctx, uid, chatID); err != nil {
 			return nil, err
 		}
 	}
@@ -462,8 +463,8 @@ func (s *GroupService) KickMember(ctx context.Context, chatID, operatorUID, targ
 			return nil, err
 		}
 	}
-	if s.convMgr != nil {
-		if err := s.convMgr.MarkLeft(ctx, targetUID, chatID); err != nil {
+	if s.conversations != nil {
+		if err := s.conversations.UserLeft(ctx, targetUID, chatID); err != nil {
 			return nil, err
 		}
 	}
@@ -625,13 +626,13 @@ func (s *GroupService) DismissGroup(ctx context.Context, chatID, operatorUID str
 	if err != nil {
 		return nil, err
 	}
-	if s.convMgr != nil {
+	if s.conversations != nil {
 		memberUIDs, err := s.members.ListUIDs(ctx, group.ChatID)
 		if err != nil {
 			return nil, err
 		}
 		for _, uid := range memberUIDs {
-			if err := s.convMgr.MarkLeft(ctx, uid, chatID); err != nil {
+			if err := s.conversations.UserLeft(ctx, uid, chatID); err != nil {
 				return nil, err
 			}
 		}
