@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestGenerateObjectIDUsesUUIDV7(t *testing.T) {
-	id, err := GenerateObjectID()
+func TestNewObjectIDUsesUUIDV7(t *testing.T) {
+	id, err := NewObjectID()
 	if err != nil {
 		t.Fatalf("generate object id: %v", err)
 	}

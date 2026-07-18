@@ -7,7 +7,6 @@ import (
 
 	"d-im/pkg/types"
 
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -23,11 +22,6 @@ type Chat struct {
 	CreatedBy   string             `bson:"created_by" json:"created_by"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
-}
-
-// GenerateChatID 生成会话实体 ID（UUID v7）。
-func GenerateChatID() string {
-	return uuid.Must(uuid.NewV7()).String()
 }
 
 // GenerateSingleChatKey 生成单聊幂等键，仅用于唯一约束，不作为公开会话 ID。

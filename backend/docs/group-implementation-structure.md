@@ -110,7 +110,7 @@ backend/cmd/group/
 职责：
 
 - 定义消息会话实体 `Chat`。
-- 定义 `ChatType`、`GenerateChatID` 等消息会话相关常量和纯函数。
+- 定义 `ChatType`、`NewChatID` 等消息会话相关常量和纯函数。
 - 维护 `chat_id`、`chat_type`、单聊成员、单聊幂等键、消息序号等字段定义。
 
 不做：

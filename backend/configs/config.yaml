@@ -40,10 +40,6 @@ nats:
     message_push: im.message.push
     message_event: im.message.event
 
-snowflake:
-  worker_id: 1
-  datacenter_id: 1
-
 jwt:
   secret: change-me-in-production
   access_expire: 15m

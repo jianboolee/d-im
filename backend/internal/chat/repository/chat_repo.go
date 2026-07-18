@@ -33,7 +33,7 @@ func (r *ChatRepo) Collection() *mongo.Collection {
 // CreateOrGetSingleChat 获取或创建单聊会话。
 func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string) (*model.Chat, error) {
 	singleKey := generateSingleChatKey(uid1, uid2)
-	chatID := model.GenerateChatID()
+	chatID := model.NewChatID()
 	now := time.Now()
 
 	filter := bson.M{
@@ -69,7 +69,7 @@ func (r *ChatRepo) CreateOrGetSingleChat(ctx context.Context, uid1, uid2 string)
 
 // CreateGroupChat 创建群聊对应的消息会话实体。
 func (r *ChatRepo) CreateGroupChat(ctx context.Context, creatorUID string) (*model.Chat, error) {
-	chatID := model.GenerateChatID()
+	chatID := model.NewChatID()
 	now := time.Now()
 	chat := &model.Chat{
 		ChatID:    chatID,

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -14,14 +13,6 @@ type fakeMessageUserReader map[string]*model.User
 
 func (r fakeMessageUserReader) FindByID(_ context.Context, id string) (*model.User, error) {
 	return r[id], nil
-}
-
-func TestGenerateMsgIDUsesMessagePrefix(t *testing.T) {
-	svc := NewMessageService(nil, nil, nil, nil)
-	msgID := svc.GenerateMsgID()
-	if !strings.HasPrefix(msgID, "msg_") {
-		t.Fatalf("expected msg_ prefix, got %q", msgID)
-	}
 }
 
 func TestSenderDisplayNameResolvesUserNickname(t *testing.T) {

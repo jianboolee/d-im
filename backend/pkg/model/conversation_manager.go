@@ -9,7 +9,6 @@ import (
 	"d-im/pkg/mongodb"
 	"d-im/pkg/types"
 
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -33,10 +32,6 @@ func NewConversationManager(db *mongo.Database) *ConversationManager {
 	}
 }
 
-func (m *ConversationManager) GenerateConversationID() string {
-	return "conv_" + uuid.Must(uuid.NewV7()).String()
-}
-
 // CreateOrUpdate 为用户创建或更新会话视图（upsert）
 func (m *ConversationManager) CreateOrUpdate(ctx context.Context, conv *Conversation) error {
 	now := time.Now()
@@ -57,7 +52,7 @@ func (m *ConversationManager) CreateOrUpdate(ctx context.Context, conv *Conversa
 
 	update := bson.M{
 		"$setOnInsert": bson.M{
-			"conversation_id": m.GenerateConversationID(),
+			"conversation_id": NewConversationID(),
 			"uid":             conv.UID,
 			"chat_id":         conv.ChatID,
 			"chat_type":       conv.ChatType,
@@ -95,7 +90,7 @@ func (m *ConversationManager) BatchCreate(ctx context.Context, uidList []string,
 
 		update := bson.M{
 			"$setOnInsert": bson.M{
-				"conversation_id": m.GenerateConversationID(),
+				"conversation_id": NewConversationID(),
 				"uid":             uid,
 				"chat_id":         chat.ChatID,
 				"chat_type":       chat.ChatType,

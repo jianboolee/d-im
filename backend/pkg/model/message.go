@@ -13,7 +13,7 @@ import (
 // Message 消息主模型 - MongoDB文档结构
 type Message struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	MsgID       string             `bson:"msg_id" json:"msg_id"` // 业务消息ID(雪花ID/UUID)
+	MsgID       string             `bson:"msg_id" json:"msg_id"` // UUID v7
 	ChatID      string             `bson:"chat_id" json:"chat_id"`
 	ChatType    types.ChatType     `bson:"chat_type" json:"chat_type"`
 	Seq         int64              `bson:"seq" json:"sequence"`

@@ -9,8 +9,6 @@ import (
 	"d-im/internal/message/repository"
 	"d-im/pkg/model"
 	natsq "d-im/pkg/queue/nats"
-
-	"github.com/google/uuid"
 )
 
 var ErrForbidden = errors.New("forbidden")
@@ -65,11 +63,6 @@ func (s *MessageService) senderDisplayName(ctx context.Context, senderID, fallba
 		return ""
 	}
 	return strings.TrimSpace(user.Nickname)
-}
-
-// GenerateMsgID 生成消息ID（UUID v7）。
-func (s *MessageService) GenerateMsgID() string {
-	return "msg_" + uuid.Must(uuid.NewV7()).String()
 }
 
 // GetHistory 获取会话历史消息页，返回值为新到旧顺序。

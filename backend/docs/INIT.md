@@ -183,9 +183,6 @@ d-im/backend/
 │   ├── pkg/errcode/                        # 错误码定义
 │   │   └── errcode.go
 │   │
-│   ├── snowflake/                          # 雪花ID生成器
-│   │   └── snowflake.go
-│   │
 │   ├── crypto/                             # 加密工具
 │   │   ├── aes.go
 │   │   └── hash.go
@@ -423,11 +420,6 @@ nats:
     message_push: im.message.push
     message_event: im.message.event
 
-# 雪花ID配置
-snowflake:
-  worker_id: 1
-  datacenter_id: 1
-
 # 媒体存储配置
 storage:
   type: minio
@@ -477,7 +469,6 @@ import (
     "d-im/pkg/mongodb"
     "d-im/pkg/cache/redis"
     "d-im/pkg/queue/nats"
-    "d-im/pkg/snowflake"
 )
 
 func main() {
@@ -488,14 +479,12 @@ func main() {
     mongoClient := mongodb.NewClient(cfg.MongoDB)
     redisClient := redis.NewClient(cfg.Redis)
     natsConn := nats.NewConnection(cfg.NATS)
-    idGenerator := snowflake.NewGenerator(cfg.Snowflake)
     
     // 3. 创建依赖注入
     deps := &Dependencies{
         MongoDB:  mongoClient,
         Redis:    redisClient,
         NATS:    natsConn,
-        IDGen:    idGenerator,
     }
     
     // 4. 初始化服务

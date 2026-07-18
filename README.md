@@ -205,7 +205,6 @@ backend/
 │   ├── queue/      # NATS 消息队列
 │   ├── crypto/     # JWT + 加密
 │   ├── config/     # 配置（Viper）
-│   └── snowflake/  # 雪花 ID
 └── deployments/    # Docker Compose
 ```
 

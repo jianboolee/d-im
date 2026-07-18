@@ -84,7 +84,7 @@ func (s *UploadService) UploadImage(ctx context.Context, header *multipart.FileH
 		return nil, fmt.Errorf("invalid image dimensions")
 	}
 
-	mediaID, err := storage.GenerateObjectID()
+	mediaID, err := storage.NewObjectID()
 	if err != nil {
 		return nil, err
 	}

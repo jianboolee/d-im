@@ -182,7 +182,7 @@ func (s *MessageService) Send(ctx context.Context, req *SendMessageReq) (*SendMe
 		return nil, err
 	}
 
-	msgID := s.GenerateMsgID()
+	msgID := model.NewMessageID()
 	msgSeq, err := s.chatRepo.NextMessageSeq(ctx, req.ChatID)
 	if err != nil {
 		return nil, fmt.Errorf("next message seq: %w", err)

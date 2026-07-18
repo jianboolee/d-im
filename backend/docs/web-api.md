@@ -1125,7 +1125,7 @@ Authorization: Bearer <access_token>
 
 ## 媒体上传接口
 
-媒体存储默认使用本地存储，可通过 `storage.provider` 平滑切换到阿里云 OSS、七牛云等 provider。媒体对象 ID 独立生成，使用 UUID v7，不复用 snowflake。
+媒体存储默认使用本地存储，可通过 `storage.provider` 平滑切换到阿里云 OSS、七牛云等 provider。媒体对象 ID 使用无前缀 UUID v7。
 
 ### 上传图片
 
@@ -1248,7 +1248,7 @@ web 发送：
 
 规则：
 
-- `seq_id` 是单条 WebSocket 连接内的心跳自增序号，不使用 Snowflake。
+- `seq_id` 是单条 WebSocket 连接内的心跳序列标识，不是领域实体 ID。
 - `client_time` 和 `server_time` 都是毫秒时间戳。
 - web SDK 收到 `pong` 后按 `seq_id` 匹配本地 pending ping，计算 RTT 和客户端时钟偏移。
 - 连续 3 次没有收到对应 `pong` 时，web SDK 主动断开并触发重连。
