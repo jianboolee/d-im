@@ -10,7 +10,6 @@ import {
   collectPeerUserIds,
   sortConversationsByActivity,
   withClearedUnreadForConversation,
-  withClearedUnreadForPeer,
 } from '@/utils/im/conversation'
 
 const PAGE_SIZE = 20
@@ -347,13 +346,6 @@ export const useConversationListStore = defineStore('conversationList', () => {
     )
   }
 
-  function clearUnreadForPeer(peerId: string) {
-    const userId = currentUserId.value
-    if (!userId || !peerId) return
-
-    conversations.value = withClearedUnreadForPeer(conversations.value, peerId, userId)
-  }
-
   function clearUnreadForConversation(conversationId: string) {
     conversations.value = withClearedUnreadForConversation(conversations.value, conversationId)
   }
@@ -488,7 +480,6 @@ export const useConversationListStore = defineStore('conversationList', () => {
     searchConversations,
     loadMoreSearchConversations,
     handleIncomingMessage,
-    clearUnreadForPeer,
     clearUnreadForConversation,
     upsertConversation,
     updateConversationMemberState,

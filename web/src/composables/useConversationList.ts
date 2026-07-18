@@ -11,7 +11,6 @@ export function useConversationList() {
     searchConversations: store.searchConversations,
     loadMoreSearchConversations: store.loadMoreSearchConversations,
     handleIncomingMessage: store.handleIncomingMessage,
-    clearUnreadForPeer: store.clearUnreadForPeer,
     clearUnreadForConversation: store.clearUnreadForConversation,
     upsertConversation: store.upsertConversation,
     updateConversationMemberState: store.updateConversationMemberState,

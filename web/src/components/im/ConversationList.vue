@@ -246,7 +246,10 @@ const selectConversation = async (item: { id: string; chatId: string; peerId: st
 
 const onIncomingMessage = async (message: Parameters<typeof handleIncomingMessage>[0]) => {
   mergeUsers([message.sender_profile])
-  await handleIncomingMessage(message, props.activeChatId || undefined)
+  const visibleActiveChatId = document.visibilityState === 'visible'
+    ? props.activeChatId || undefined
+    : undefined
+  await handleIncomingMessage(message, visibleActiveChatId)
   mergeConversationUsers(conversations.value)
 }
 

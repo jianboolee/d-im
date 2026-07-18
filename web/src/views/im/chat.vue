@@ -313,7 +313,6 @@ const imStore = useIMStore()
 const imTabStore = useIMTabStore()
 const {
   conversations,
-  clearUnreadForPeer,
   clearUnreadForConversation,
   handleIncomingMessage: updateConversationByMessage,
   ensureConversationByChatId,
@@ -817,9 +816,12 @@ const mergeMessages = (incoming: ChatMessage[]) => {
 }
 
 const syncConversationByMessage = (message: ChatMessage, shouldScroll = false) => {
+  const visibleActiveChatId = document.visibilityState === 'visible'
+    ? activeChatId.value
+    : undefined
   updateConversationByMessage(
     message as Parameters<typeof updateConversationByMessage>[0],
-    activeChatId.value,
+    visibleActiveChatId,
   )
   if (shouldScroll) {
     requestScrollToConversation(activeChatId.value)
@@ -833,7 +835,7 @@ const handleNewMessage = async (message: ChatMessage) => {
   syncConversationByMessage(message, message.sender_id === currentUserId.value)
   scrollToBottom(true, message.sender_id === currentUserId.value)
 
-  if (!isGroupConversation.value && message.sender_id === peerUserId.value) {
+  if (message.sender_id !== currentUserId.value && document.visibilityState === 'visible') {
     await syncUnreadState()
   }
 }
@@ -989,9 +991,6 @@ const syncUnreadState = async () => {
   }
   if (currentConversationId.value && maxSequence > localReadSeq) {
     readReporter.schedule(currentConversationId.value, maxSequence)
-  }
-  if (!isGroupConversation.value && peerUserId.value) {
-    clearUnreadForPeer(peerUserId.value)
   }
   clearUnreadForConversation(currentConversationId.value)
 }

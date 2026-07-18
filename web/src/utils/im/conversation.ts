@@ -38,6 +38,7 @@ function getMessagePreview(message: Message): string {
 }
 
 export function getPeerUserId(conversation: Conversation, currentUserId: string): string {
+  if (isGroupConversation(conversation)) return ''
   return conversation.participants.find((id) => id !== currentUserId) ?? ''
 }
 
@@ -179,31 +180,6 @@ export function applyIncomingMessage(
 }
 
 /** 本地推进指定会话的已读指针（进入聊天或当前会话收到消息后同步侧栏） */
-export function withClearedUnreadForPeer(
-  conversations: Conversation[],
-  peerId: string,
-  currentUserId: string,
-): Conversation[] {
-  if (!peerId || !currentUserId) {
-    return conversations
-  }
-
-  return conversations.map((conversation) => {
-    if (getPeerUserId(conversation, currentUserId) !== peerId) {
-      return conversation
-    }
-
-    return {
-      ...conversation,
-      last_read_sequence: Math.max(
-        conversation.last_read_sequence ?? 0,
-        conversation.last_message?.sequence ?? 0,
-      ),
-      unread_count: 0,
-    }
-  })
-}
-
 export function withClearedUnreadForConversation(
   conversations: Conversation[],
   conversationId: string,
