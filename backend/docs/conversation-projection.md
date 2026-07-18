@@ -1,10 +1,18 @@
 # Conversation projection reliability
 
-Conversation is a per-user read model derived from Chat, membership, and Message facts. Business services do not write it directly.
+Conversation is a per-user read model derived from Chat, membership, and Message facts. Projection timing follows the consistency requirement of each use case.
+
+## Consistency policy
+
+- Single-chat creation synchronously projects both user Conversations in the same MongoDB transaction as the Chat.
+- Group creation synchronously projects every initial member Conversation in the same MongoDB transaction as Chat, Group, and GroupMember.
+- Successful Chat and Group creation responses therefore provide read-your-writes consistency.
+- Message summaries and the remaining fan-out projection paths use the transactional outbox described below.
+- User-owned Conversation settings and read positions are synchronous writes.
 
 ## Delivery model
 
-- The business write and its `conversation_outbox` event are committed in one MongoDB transaction.
+- For asynchronous paths, the business write and its `conversation_outbox` event are committed in one MongoDB transaction.
 - The gateway worker claims persisted events and applies them asynchronously.
 - Failed events use persisted retry state with bounded backoff. After 20 attempts they move to `failed` for operator replay. A worker crash is recovered by reclaiming stale `processing` events.
 - Message projections advance by message sequence, so replay is idempotent and out-of-order older messages cannot overwrite newer summaries.

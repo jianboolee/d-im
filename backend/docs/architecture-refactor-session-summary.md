@@ -202,10 +202,8 @@ ConversationService 只保留：
 
 Conversation 投影采用 MongoDB Transactional Outbox。
 
-业务写与 `conversation_outbox` 事件在同一个 MongoDB 事务中提交，覆盖：
+一致性策略按用例区分：单聊创建会在同一个 MongoDB 事务中同步写入 Chat 和双方 Conversation；群聊创建会在同一个事务中同步写入 Chat、Group、初始成员和所有初始 Conversation。创建接口成功后均保证 read-your-writes。其余异步路径将业务写与 `conversation_outbox` 事件放在同一个事务中提交，覆盖：
 
-- 单聊 Chat 创建
-- 群创建
 - 成员加入
 - 成员退出或被移除
 - Message 创建

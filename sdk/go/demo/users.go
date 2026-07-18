@@ -31,6 +31,6 @@ func allUsers() []dimsdk.UserData {
 		{UserID: "user_x", Nickname: "Xander", Avatar: "https://oss.21rv.com/uploads/avatar/24.jpg", Status: "active"},
 		{UserID: "user_y", Nickname: "Yara", Avatar: "https://oss.21rv.com/uploads/avatar/25.jpg", Status: "active"},
 		{UserID: "user_z", Nickname: "Zoe", Avatar: "https://oss.21rv.com/uploads/avatar/26.jpg", Status: "active"},
-		{UserID: "admin", Nickname: "客服", Avatar: "https://oss.21rv.com/uploads/avatar/1.jpg", Status: "active"},
+		{UserID: "user_service", Nickname: "客服", Avatar: "https://oss.21rv.com/uploads/avatar/1.jpg", Status: "active"},
 	}
 }

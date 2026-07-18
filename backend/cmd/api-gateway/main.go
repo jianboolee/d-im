@@ -91,11 +91,15 @@ func main() {
 	convOutboxRepo := conversationOutbox.NewRepository(db)
 	convEvents := conversationOutbox.NewPublisher(convOutboxRepo)
 	chatR := chatRepo.NewChatRepo(db)
-	chatService := chatSvc.NewChatService(chatR, convEvents)
+	// Single-chat creation also requires read-your-writes consistency: the Chat
+	// and both user Conversation views share one required MongoDB transaction.
+	chatService := chatSvc.NewChatService(chatR, convProjector)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	uRepo := userRepo.NewUserRepo(db)
-	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convEvents)
+	// Group creation requires read-your-writes consistency: initial member
+	// conversations are projected inside the same transaction as Chat/Group.
+	groupService := groupSvc.NewGroupService(db, chatService, gRepo, mRepo, convProjector)
 	memberService := groupSvc.NewMemberService(db, chatR, gRepo, mRepo, convEvents)
 	groupService.SetMaxMembers(cfg.Group.MaxMembers)
 	memberService.SetMaxMembers(cfg.Group.MaxMembers)
