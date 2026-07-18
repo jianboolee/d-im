@@ -41,7 +41,7 @@ func NewMessageHandler(svc *messageSvc.MessageService, convSvc *convSvc.Conversa
 func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
@@ -55,22 +55,22 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		QuoteMessageID  string            `json:"quote_message_id,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if raw.ChatID == "" && raw.ConversationID != "" {
 		raw.ChatID = raw.ConversationID
 	}
 	if raw.ChatID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "chat_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "chat_id is required")
 		return
 	}
 	if raw.MessageType == "" {
-		writeAPIError(w, http.StatusBadRequest, 400010, "message_type is required")
+		writeError(w, http.StatusBadRequest, 400010, "message_type is required")
 		return
 	}
 	if raw.MessageType == types.MessageTypeSystemEvent {
-		writeAPIError(w, http.StatusForbidden, 403001, "system_event cannot be sent by clients")
+		writeError(w, http.StatusForbidden, 403001, "system_event cannot be sent by clients")
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		conv, err := h.convSvc.GetConversationByChatID(r.Context(), uid, raw.ChatID)
 		if err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
-				writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+				writeError(w, http.StatusNotFound, 404001, "conversation not found")
 				return
 			}
 		}
@@ -94,7 +94,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	content, err := parseContent(raw.MessageType, raw.Content)
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400011, err.Error())
+		writeError(w, http.StatusBadRequest, 400011, err.Error())
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if raw.ClientTime != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, raw.ClientTime)
 		if err != nil {
-			writeAPIError(w, http.StatusBadRequest, 400012, "invalid client_time")
+			writeError(w, http.StatusBadRequest, 400012, "invalid client_time")
 			return
 		}
 		clientTime = parsed
@@ -110,7 +110,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	contentBytes, err := json.Marshal(content)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500301, "marshal content failed")
+		writeError(w, http.StatusInternalServerError, 500301, "marshal content failed")
 		return
 	}
 
@@ -127,14 +127,14 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500301, "marshal failed")
+		writeError(w, http.StatusInternalServerError, 500301, "marshal failed")
 		return
 	}
 	if err := h.natsPub.Publish("im.message.send", data); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500302, "publish message failed")
+		writeError(w, http.StatusInternalServerError, 500302, "publish message failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"status":            "accepted",
 		"chat_id":           raw.ChatID,
 		"client_message_id": raw.ClientMessageID,
@@ -147,17 +147,17 @@ func (h *MessageHandler) RecallMessage(w http.ResponseWriter, r *http.Request) {
 
 	var req messageSvc.RecallMessageReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	req.UserID = uid
 
 	if err := h.messageService.Recall(r.Context(), &req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeError(w, http.StatusInternalServerError, 500304, "recall message failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeSuccess(w, map[string]string{"status": "ok"})
 }
 
 // ListChatMessages 通过 chat_id 查询会话历史消息
@@ -165,29 +165,29 @@ func (h *MessageHandler) RecallMessage(w http.ResponseWriter, r *http.Request) {
 func (h *MessageHandler) ListChatMessages(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 	chatID := r.PathValue("id")
 	if chatID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "chat_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "chat_id is required")
 		return
 	}
 	limit := int64(20)
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = parsed
 	}
 	messages, nextCursor, hasMore, err := h.messageService.GetHistory(r.Context(), uid, chatID, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
+		writeError(w, http.StatusBadRequest, 400009, "invalid cursor")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       h.chatMessagesToDTOs(r.Context(), messages),
 		"next_cursor": nextCursor,
 		"has_more":    hasMore,
@@ -200,34 +200,34 @@ func (h *MessageHandler) ListChatMessages(w http.ResponseWriter, r *http.Request
 func (h *MessageHandler) SearchChatMessages(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 	chatID := r.PathValue("id")
 	if chatID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "chat_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "chat_id is required")
 		return
 	}
 	keyword := strings.TrimSpace(r.URL.Query().Get("q"))
 	if keyword == "" {
-		writeAPIError(w, http.StatusBadRequest, 400014, "q is required")
+		writeError(w, http.StatusBadRequest, 400014, "q is required")
 		return
 	}
 	limit := int64(20)
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = parsed
 	}
 	messages, nextCursor, hasMore, err := h.messageService.SearchHistory(r.Context(), uid, chatID, keyword, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500303, "search messages failed")
+		writeError(w, http.StatusInternalServerError, 500303, "search messages failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       h.chatMessagesToDTOs(r.Context(), messages),
 		"next_cursor": nextCursor,
 		"has_more":    hasMore,
@@ -262,24 +262,24 @@ func (h *MessageHandler) ForwardMessage(w http.ResponseWriter, r *http.Request) 
 
 	var req messageSvc.ForwardMessageReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	req.SenderID = uid
 
 	resp, err := h.messageService.Forward(r.Context(), &req)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeError(w, http.StatusInternalServerError, 500305, "forward message failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeSuccess(w, resp)
 }
 
 // ListMessages 查询消息列表
 func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现消息列表查询
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeSuccess(w, map[string]string{"status": "ok"})
 }
 
 // ListConversationMessages 查询会话历史消息
@@ -287,23 +287,23 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	conversationID := r.PathValue("id")
 	if conversationID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "conversation_id is required")
 		return
 	}
 
 	conv, err := h.convSvc.GetConversation(r.Context(), uid, conversationID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		writeError(w, http.StatusInternalServerError, 500202, "get conversation failed")
 		return
 	}
 
@@ -311,7 +311,7 @@ func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = parsed
@@ -319,7 +319,7 @@ func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http
 
 	messages, nextCursor, hasMore, err := h.messageService.GetHistory(r.Context(), uid, conv.ChatID, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
+		writeError(w, http.StatusBadRequest, 400009, "invalid cursor")
 		return
 	}
 
@@ -328,7 +328,7 @@ func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http
 		items = append(items, h.messageDTO(r.Context(), messages[i], nil, conv))
 	}
 
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       items,
 		"next_cursor": nextCursor,
 		"has_more":    hasMore,
@@ -340,29 +340,29 @@ func (h *MessageHandler) ListConversationMessages(w http.ResponseWriter, r *http
 func (h *MessageHandler) SearchConversationMessages(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	conversationID := r.PathValue("id")
 	if conversationID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "conversation_id is required")
 		return
 	}
 
 	keyword := strings.TrimSpace(r.URL.Query().Get("q"))
 	if keyword == "" {
-		writeAPIError(w, http.StatusBadRequest, 400014, "q is required")
+		writeError(w, http.StatusBadRequest, 400014, "q is required")
 		return
 	}
 
 	conv, err := h.convSvc.GetConversation(r.Context(), uid, conversationID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		writeError(w, http.StatusInternalServerError, 500202, "get conversation failed")
 		return
 	}
 
@@ -370,7 +370,7 @@ func (h *MessageHandler) SearchConversationMessages(w http.ResponseWriter, r *ht
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = parsed
@@ -378,7 +378,7 @@ func (h *MessageHandler) SearchConversationMessages(w http.ResponseWriter, r *ht
 
 	messages, nextCursor, hasMore, err := h.messageService.SearchHistory(r.Context(), uid, conv.ChatID, keyword, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
+		writeError(w, http.StatusBadRequest, 400009, "invalid cursor")
 		return
 	}
 
@@ -387,7 +387,7 @@ func (h *MessageHandler) SearchConversationMessages(w http.ResponseWriter, r *ht
 		items = append(items, h.messageDTO(r.Context(), messages[i], nil, conv))
 	}
 
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       items,
 		"next_cursor": nextCursor,
 		"has_more":    hasMore,
@@ -550,10 +550,4 @@ func parseContent(msgType types.MessageType, raw json.RawMessage) (types.Content
 	}
 
 	return content, nil
-}
-
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
 }

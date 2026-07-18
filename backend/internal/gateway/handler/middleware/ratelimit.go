@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"d-im/internal/gateway/httpapi"
 )
 
 // RateLimiter 简单令牌桶限流器（单机版）
@@ -42,7 +44,7 @@ func RateLimitMiddleware(limit *RateLimiter) func(http.Handler) http.Handler {
 			}
 
 			if !limit.allow(uid) {
-				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+				httpapi.WriteError(w, http.StatusTooManyRequests, httpapi.Error{Code: httpapi.CodeTooManyRequests, Message: "too many requests"})
 				return
 			}
 

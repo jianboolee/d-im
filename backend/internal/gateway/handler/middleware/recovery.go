@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+
+	"d-im/internal/gateway/httpapi"
 )
 
 // RecoveryMiddleware panic恢复中间件
@@ -12,7 +14,7 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("[panic] %v\n%s", err, debug.Stack())
-				http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+				httpapi.WriteError(w, http.StatusInternalServerError, httpapi.Error{Code: httpapi.CodeInternal, Message: "internal server error"})
 			}
 		}()
 		next.ServeHTTP(w, r)

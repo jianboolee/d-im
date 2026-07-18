@@ -29,7 +29,7 @@ func NewUserHandler(users userReader) *UserHandler {
 func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	id := middleware.GetUserID(r.Context())
 	if id == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
@@ -40,7 +40,7 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeAPIError(w, http.StatusBadRequest, 400002, "id is required")
+		writeError(w, http.StatusBadRequest, 400002, "id is required")
 		return
 	}
 
@@ -51,14 +51,14 @@ func (h *UserHandler) writeUserByID(w http.ResponseWriter, r *http.Request, id s
 	user, err := h.users.FindByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "user not found")
+			writeError(w, http.StatusNotFound, 404001, "user not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500101, "get user failed")
+		writeError(w, http.StatusInternalServerError, 500101, "get user failed")
 		return
 	}
 
-	writeAPISuccess(w, userDTOFromModel(user))
+	writeSuccess(w, userDTOFromModel(user))
 }
 
 type userDTO struct {

@@ -143,8 +143,8 @@ func main() {
 	groupHandler := handler.NewGroupHandler(groupService, memberService, conversationSvc, uRepo)
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)
-	sdkHandler := handler.NewSDKHandler(jwtMgr, uRepo)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, uploadHandler, mediaStaticHandler, userHandler, sdkHandler)
+	userSyncHandler := handler.NewUserSyncHandler(jwtMgr, uRepo)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, uploadHandler, mediaStaticHandler, userHandler, userSyncHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

@@ -13,7 +13,7 @@ func TestClientUsesExpectedAuthentication(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/sdk/users/user-a":
+		case "/api/v1/management/users/user-a":
 			if r.Method != http.MethodPut {
 				t.Fatalf("method = %q, want PUT", r.Method)
 			}

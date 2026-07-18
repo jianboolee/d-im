@@ -20,16 +20,16 @@ func NewUploadHandler(uploads *mediaSvc.UploadService) *UploadHandler {
 // POST /api/v1/uploads/image
 func (h *UploadHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 	if middleware.GetUserID(r.Context()) == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 	if h.uploads == nil {
-		writeAPIError(w, http.StatusInternalServerError, 500501, "upload service is unavailable")
+		writeError(w, http.StatusInternalServerError, 500501, "upload service is unavailable")
 		return
 	}
 
 	if err := r.ParseMultipartForm(h.uploads.MaxImageSize()); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400030, "invalid multipart form")
+		writeError(w, http.StatusBadRequest, 400030, "invalid multipart form")
 		return
 	}
 	file, _, err := r.FormFile("file")
@@ -37,20 +37,20 @@ func (h *UploadHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 		_ = file.Close()
 	}
 	if errors.Is(err, http.ErrMissingFile) {
-		writeAPIError(w, http.StatusBadRequest, 400031, "file is required")
+		writeError(w, http.StatusBadRequest, 400031, "file is required")
 		return
 	}
 
 	header := r.MultipartForm.File["file"]
 	if len(header) == 0 {
-		writeAPIError(w, http.StatusBadRequest, 400031, "file is required")
+		writeError(w, http.StatusBadRequest, 400031, "file is required")
 		return
 	}
 
 	uploaded, err := h.uploads.UploadImage(r.Context(), header[0])
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400032, err.Error())
+		writeError(w, http.StatusBadRequest, 400032, err.Error())
 		return
 	}
-	writeAPISuccess(w, uploaded)
+	writeSuccess(w, uploaded)
 }

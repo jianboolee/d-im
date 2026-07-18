@@ -23,17 +23,17 @@ func (r *userSnapshotRepoStub) UpsertSnapshot(_ context.Context, user *model.Use
 	return r.err
 }
 
-func TestSDKHandlerPutUserSnapshot(t *testing.T) {
+func TestUserSyncHandlerPutUserSnapshot(t *testing.T) {
 	repo := &userSnapshotRepoStub{}
-	handler := newTestSDKHandler(repo)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/sdk/users/user-a", strings.NewReader(`{
+	handler := newTestUserSyncHandler(repo)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/management/users/user-a", strings.NewReader(`{
 		"nickname":"Alice",
 		"avatar_url":"https://example.com/avatar.png",
 		"status":"active",
 		"version":2,
 		"ext":{"tenant":"acme"}
 	}`))
-	req.SetPathValue("id", "user-a")
+	req.SetPathValue("userID", "user-a")
 	req.Header.Set("X-API-Key", "test-api-key")
 	recorder := httptest.NewRecorder()
 
@@ -47,11 +47,11 @@ func TestSDKHandlerPutUserSnapshot(t *testing.T) {
 	}
 }
 
-func TestSDKHandlerRejectsInvalidSnapshot(t *testing.T) {
+func TestUserSyncHandlerRejectsInvalidSnapshot(t *testing.T) {
 	repo := &userSnapshotRepoStub{}
-	handler := newTestSDKHandler(repo)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/sdk/users/user-a", strings.NewReader(`{"status":"deleted","version":0}`))
-	req.SetPathValue("id", "user-a")
+	handler := newTestUserSyncHandler(repo)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/management/users/user-a", strings.NewReader(`{"status":"deleted","version":0}`))
+	req.SetPathValue("userID", "user-a")
 	req.Header.Set("X-API-Key", "test-api-key")
 	recorder := httptest.NewRecorder()
 
@@ -65,11 +65,11 @@ func TestSDKHandlerRejectsInvalidSnapshot(t *testing.T) {
 	}
 }
 
-func TestSDKHandlerRejectsStaleVersion(t *testing.T) {
+func TestUserSyncHandlerRejectsStaleVersion(t *testing.T) {
 	repo := &userSnapshotRepoStub{err: userRepository.ErrStaleUserVersion}
-	handler := newTestSDKHandler(repo)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/sdk/users/user-a", strings.NewReader(`{"nickname":"Alice","status":"active","version":1}`))
-	req.SetPathValue("id", "user-a")
+	handler := newTestUserSyncHandler(repo)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/management/users/user-a", strings.NewReader(`{"nickname":"Alice","status":"active","version":1}`))
+	req.SetPathValue("userID", "user-a")
 	req.Header.Set("X-API-Key", "test-api-key")
 	recorder := httptest.NewRecorder()
 
@@ -80,9 +80,9 @@ func TestSDKHandlerRejectsStaleVersion(t *testing.T) {
 	}
 }
 
-func newTestSDKHandler(repo *userSnapshotRepoStub) *SDKHandler {
+func newTestUserSyncHandler(repo *userSnapshotRepoStub) *UserSyncHandler {
 	jwtManager := crypto.NewJWTManager("test-secret", time.Minute, time.Hour, time.Minute, "test-api-key")
-	return NewSDKHandler(jwtManager, repo)
+	return NewUserSyncHandler(jwtManager, repo)
 }
 
 var _ userRepo = (*userSnapshotRepoStub)(nil)

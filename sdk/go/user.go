@@ -20,7 +20,7 @@ func (c *Client) UpsertUser(ctx context.Context, user UserData) error {
 	if user.Status != "active" && user.Status != "disabled" {
 		return fmt.Errorf("upsert user: status must be active or disabled")
 	}
-	respBody, err := c.do(ctx, http.MethodPut, "/api/v1/sdk/users/"+url.PathEscape(user.UserID), userSnapshot{
+	respBody, err := c.do(ctx, http.MethodPut, "/api/v1/management/users/"+url.PathEscape(user.UserID), userSnapshot{
 		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 		Status:   user.Status,

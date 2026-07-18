@@ -37,7 +37,7 @@ func NewGroupHandler(groups *groupSvc.GroupService, members *groupSvc.MemberServ
 func (h *GroupHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 	limit, offset, ok := parseLimitOffset(w, r)
@@ -46,14 +46,14 @@ func (h *GroupHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	groups, err := h.groups.ListGroupsForMember(r.Context(), uid, int64(limit), int64(offset))
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500406, "list groups failed")
+		writeError(w, http.StatusInternalServerError, 500406, "list groups failed")
 		return
 	}
 	items := make([]groupDTO, 0, len(groups))
 	for _, group := range groups {
 		items = append(items, h.groupDTO(group, h.currentConversationID(r, group.ChatID)))
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items": items,
 	})
 }
@@ -63,18 +63,18 @@ func (h *GroupHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	var req createGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	group, err := h.groups.CreateGroup(r.Context(), req.Name, uid, req.MemberUserIDs)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500401, "create group failed")
+		writeError(w, http.StatusInternalServerError, 500401, "create group failed")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp["group"] = h.groupDTO(group, conversationID)
-	writeAPISuccess(w, resp)
+	writeSuccess(w, resp)
 }
 
 // GetGroup 获取群详情。
@@ -105,15 +105,15 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	members, err := h.members.ListMembers(r.Context(), group.ChatID, 20, 0)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500405, "get group members failed")
+		writeError(w, http.StatusInternalServerError, 500405, "get group members failed")
 		return
 	}
 	currentMember, err := h.members.GetMember(r.Context(), group.ChatID, uid)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500405, "get current group member failed")
+		writeError(w, http.StatusInternalServerError, 500405, "get current group member failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group":          h.groupDTO(group, h.currentConversationID(r, group.ChatID)),
 		"members":        h.memberDTOs(r, group, members),
 		"current_member": h.memberDTOs(r, group, []*model.GroupMember{currentMember})[0],
@@ -130,11 +130,11 @@ func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 
 	var req updateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if req.Name == nil && req.AvatarURL == nil && req.Avatar == nil && req.Description == nil {
-		writeAPIError(w, http.StatusBadRequest, 400023, "no fields to update")
+		writeError(w, http.StatusBadRequest, 400023, "no fields to update")
 		return
 	}
 	avatar := req.Avatar
@@ -151,7 +151,7 @@ func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500402, "update group failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -168,7 +168,7 @@ func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.Atoi(rawLimit)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = minInt(parsed, 100)
@@ -178,7 +178,7 @@ func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	if cursor := r.URL.Query().Get("cursor"); cursor != "" {
 		parsed, err := strconv.Atoi(cursor)
 		if err != nil || parsed < 0 {
-			writeAPIError(w, http.StatusBadRequest, 400009, "invalid cursor")
+			writeError(w, http.StatusBadRequest, 400009, "invalid cursor")
 			return
 		}
 		start = parsed
@@ -186,7 +186,7 @@ func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 
 	members, err := h.members.ListMembers(r.Context(), group.ChatID, int64(limit), int64(start))
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500405, "get group members failed")
+		writeError(w, http.StatusInternalServerError, 500405, "get group members failed")
 		return
 	}
 	nextCursor := ""
@@ -194,7 +194,7 @@ func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 		nextCursor = strconv.Itoa(start + len(members))
 	}
 
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       h.memberDTOs(r, group, members),
 		"next_cursor": nextCursor,
 		"has_more":    nextCursor != "",
@@ -211,11 +211,11 @@ func (h *GroupHandler) InviteMembers(w http.ResponseWriter, r *http.Request) {
 
 	var req inviteMembersRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if len(req.MemberUserIDs) == 0 {
-		writeAPIError(w, http.StatusBadRequest, 400021, "member_user_ids is required")
+		writeError(w, http.StatusBadRequest, 400021, "member_user_ids is required")
 		return
 	}
 
@@ -224,7 +224,7 @@ func (h *GroupHandler) InviteMembers(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500403, "invite members failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -241,7 +241,7 @@ func (h *GroupHandler) LeaveGroup(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500404, "leave group failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{})
+	writeSuccess(w, map[string]interface{}{})
 }
 
 // JoinGroup 加入公开自由入群的群。
@@ -249,12 +249,12 @@ func (h *GroupHandler) LeaveGroup(w http.ResponseWriter, r *http.Request) {
 func (h *GroupHandler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 	groupID := r.PathValue("id")
 	if groupID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400022, "group_id is required")
+		writeError(w, http.StatusBadRequest, 400022, "group_id is required")
 		return
 	}
 	updated, err := h.members.JoinGroup(r.Context(), groupID, uid)
@@ -262,7 +262,7 @@ func (h *GroupHandler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500407, "join group failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -277,7 +277,7 @@ func (h *GroupHandler) KickMember(w http.ResponseWriter, r *http.Request) {
 	}
 	targetUID := r.PathValue("uid")
 	if targetUID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400024, "member uid is required")
+		writeError(w, http.StatusBadRequest, 400024, "member uid is required")
 		return
 	}
 	updated, err := h.members.KickMember(r.Context(), group.ChatID, operatorUID, targetUID)
@@ -285,7 +285,7 @@ func (h *GroupHandler) KickMember(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500408, "kick member failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -303,7 +303,7 @@ func (h *GroupHandler) DismissGroup(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500409, "dismiss group failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, ""),
 	})
 }
@@ -319,7 +319,7 @@ func (h *GroupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	settings := group.Settings
 	var req updateSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if req.JoinMethod != nil {
@@ -338,7 +338,7 @@ func (h *GroupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		settings.MutedMembers = uniqueNonEmpty(req.MutedMembers)
 	}
 	if !validJoinMethod(settings.JoinMethod) {
-		writeAPIError(w, http.StatusBadRequest, 400025, "invalid join_method")
+		writeError(w, http.StatusBadRequest, 400025, "invalid join_method")
 		return
 	}
 	updated, err := h.groups.UpdateSettings(r.Context(), group.ChatID, operatorUID, settings)
@@ -346,7 +346,7 @@ func (h *GroupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500410, "update group settings failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -361,7 +361,7 @@ func (h *GroupHandler) SetAnnouncement(w http.ResponseWriter, r *http.Request) {
 	}
 	var req setAnnouncementRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	updated, err := h.groups.SetAnnouncement(r.Context(), group.ChatID, operatorUID, req.Announcement)
@@ -369,7 +369,7 @@ func (h *GroupHandler) SetAnnouncement(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500411, "set announcement failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"announcement": updated.Announcement,
 		"group":        h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
@@ -386,7 +386,7 @@ func (h *GroupHandler) SetMemberRole(w http.ResponseWriter, r *http.Request) {
 	targetUID := r.PathValue("uid")
 	var req setMemberRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	updated, err := h.members.SetMemberRole(r.Context(), group.ChatID, operatorUID, targetUID, model.MemberRole(req.Role))
@@ -394,7 +394,7 @@ func (h *GroupHandler) SetMemberRole(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500412, "set member role failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -409,7 +409,7 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 	}
 	var req transferOwnerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	targetUID := strings.TrimSpace(req.OwnerUID)
@@ -417,7 +417,7 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 		targetUID = strings.TrimSpace(req.UserID)
 	}
 	if targetUID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400026, "owner_uid is required")
+		writeError(w, http.StatusBadRequest, 400026, "owner_uid is required")
 		return
 	}
 	updated, err := h.members.TransferOwner(r.Context(), group.ChatID, operatorUID, targetUID)
@@ -425,7 +425,7 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 		h.writeGroupServiceError(w, err, 500413, "transfer owner failed")
 		return
 	}
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"group": h.groupDTO(updated, h.currentConversationID(r, updated.ChatID)),
 	})
 }
@@ -433,21 +433,21 @@ func (h *GroupHandler) TransferOwner(w http.ResponseWriter, r *http.Request) {
 func (h *GroupHandler) requireGroupMember(w http.ResponseWriter, r *http.Request) *model.Group {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return nil
 	}
 	groupID := r.PathValue("id")
 	if groupID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400022, "group_id is required")
+		writeError(w, http.StatusBadRequest, 400022, "group_id is required")
 		return nil
 	}
 	group, err := h.groups.GetGroupForMember(r.Context(), groupID, uid)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404002, "group not found")
+			writeError(w, http.StatusNotFound, 404002, "group not found")
 			return nil
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500405, "get group failed")
+		writeError(w, http.StatusInternalServerError, 500405, "get group failed")
 		return nil
 	}
 	return group
@@ -463,15 +463,15 @@ func minInt(a, b int) int {
 func (h *GroupHandler) writeGroupServiceError(w http.ResponseWriter, err error, fallbackCode int, fallbackMessage string) {
 	switch {
 	case errors.Is(err, mongo.ErrNoDocuments):
-		writeAPIError(w, http.StatusNotFound, 404002, "group not found")
+		writeError(w, http.StatusNotFound, 404002, "group not found")
 	case errors.Is(err, groupSvc.ErrForbidden):
-		writeAPIError(w, http.StatusForbidden, 403001, "forbidden")
+		writeError(w, http.StatusForbidden, 403001, "forbidden")
 	case errors.Is(err, groupSvc.ErrInvalid):
-		writeAPIError(w, http.StatusBadRequest, 400027, err.Error())
+		writeError(w, http.StatusBadRequest, 400027, err.Error())
 	case errors.Is(err, groupSvc.ErrGroupFull):
-		writeAPIError(w, http.StatusBadRequest, 400028, "group is full")
+		writeError(w, http.StatusBadRequest, 400028, "group is full")
 	default:
-		writeAPIError(w, http.StatusInternalServerError, fallbackCode, fallbackMessage)
+		writeError(w, http.StatusInternalServerError, fallbackCode, fallbackMessage)
 	}
 }
 
@@ -480,7 +480,7 @@ func parseLimitOffset(w http.ResponseWriter, r *http.Request) (int, int, bool) {
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.Atoi(rawLimit)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return 0, 0, false
 		}
 		limit = minInt(parsed, 100)
@@ -489,7 +489,7 @@ func parseLimitOffset(w http.ResponseWriter, r *http.Request) (int, int, bool) {
 	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
 		parsed, err := strconv.Atoi(rawOffset)
 		if err != nil || parsed < 0 {
-			writeAPIError(w, http.StatusBadRequest, 400009, "invalid offset")
+			writeError(w, http.StatusBadRequest, 400009, "invalid offset")
 			return 0, 0, false
 		}
 		offset = parsed

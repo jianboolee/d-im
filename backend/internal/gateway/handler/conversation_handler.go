@@ -41,7 +41,7 @@ func NewConversationHandler(convSvc *service.ConversationService, chatRepo *chat
 func (h *ConversationHandler) ListConversations(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
@@ -49,7 +49,7 @@ func (h *ConversationHandler) ListConversations(w http.ResponseWriter, r *http.R
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.ParseInt(rawLimit, 10, 64)
 		if err != nil || parsed <= 0 {
-			writeAPIError(w, http.StatusBadRequest, 400004, "invalid limit")
+			writeError(w, http.StatusBadRequest, 400004, "invalid limit")
 			return
 		}
 		limit = parsed
@@ -57,7 +57,7 @@ func (h *ConversationHandler) ListConversations(w http.ResponseWriter, r *http.R
 
 	list, nextCursor, hasMore, err := h.convSvc.GetListByCursor(r.Context(), uid, limit, r.URL.Query().Get("cursor"))
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400005, "invalid cursor")
+		writeError(w, http.StatusBadRequest, 400005, "invalid cursor")
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *ConversationHandler) ListConversations(w http.ResponseWriter, r *http.R
 		items = append(items, h.conversationDTO(r.Context(), conv, uid))
 	}
 
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"items":       items,
 		"next_cursor": nextCursor,
 		"has_more":    hasMore,
@@ -82,27 +82,27 @@ func (h *ConversationHandler) ListConversations(w http.ResponseWriter, r *http.R
 func (h *ConversationHandler) GetConversation(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	conversationID := r.PathValue("id")
 	if conversationID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "conversation_id is required")
 		return
 	}
 
 	conv, err := h.convSvc.GetConversation(r.Context(), uid, conversationID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		writeError(w, http.StatusInternalServerError, 500202, "get conversation failed")
 		return
 	}
 
-	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
 // GetConversationByChat 获取当前用户在指定 chat 下的会话视图。
@@ -110,27 +110,27 @@ func (h *ConversationHandler) GetConversation(w http.ResponseWriter, r *http.Req
 func (h *ConversationHandler) GetConversationByChat(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	chatID := r.PathValue("id")
 	if chatID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "chat_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "chat_id is required")
 		return
 	}
 
 	conv, err := h.convSvc.GetConversationByChatID(r.Context(), uid, chatID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500202, "get conversation failed")
+		writeError(w, http.StatusInternalServerError, 500202, "get conversation failed")
 		return
 	}
 
-	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
 // CreateSingleConversation 创建或获取单聊会话
@@ -138,7 +138,7 @@ func (h *ConversationHandler) GetConversationByChat(w http.ResponseWriter, r *ht
 func (h *ConversationHandler) CreateSingleConversation(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
@@ -146,25 +146,25 @@ func (h *ConversationHandler) CreateSingleConversation(w http.ResponseWriter, r 
 		PeerUserID string `json:"peer_user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if req.PeerUserID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400006, "peer_user_id is required")
+		writeError(w, http.StatusBadRequest, 400006, "peer_user_id is required")
 		return
 	}
 	if req.PeerUserID == uid {
-		writeAPIError(w, http.StatusBadRequest, 400007, "cannot create single conversation with self")
+		writeError(w, http.StatusBadRequest, 400007, "cannot create single conversation with self")
 		return
 	}
 
 	conv, err := h.convSvc.CreateOrGetSingle(r.Context(), uid, req.PeerUserID)
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, 500201, "create conversation failed")
+		writeError(w, http.StatusInternalServerError, 500201, "create conversation failed")
 		return
 	}
 
-	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
 // ReadConversation 标记已读
@@ -172,13 +172,13 @@ func (h *ConversationHandler) CreateSingleConversation(w http.ResponseWriter, r 
 func (h *ConversationHandler) ReadConversation(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	conversationID := r.PathValue("id")
 	if conversationID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "conversation_id is required")
 		return
 	}
 
@@ -187,26 +187,26 @@ func (h *ConversationHandler) ReadConversation(w http.ResponseWriter, r *http.Re
 	}
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-			writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+			writeError(w, http.StatusBadRequest, 400001, "invalid request")
 			return
 		}
 	}
 	if req.LastReadSequence < 0 {
-		writeAPIError(w, http.StatusBadRequest, 400009, "last_read_sequence is invalid")
+		writeError(w, http.StatusBadRequest, 400009, "last_read_sequence is invalid")
 		return
 	}
 
 	conv, err := h.convSvc.ReadConversation(r.Context(), uid, conversationID, req.LastReadSequence)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500203, "mark conversation read failed")
+		writeError(w, http.StatusInternalServerError, 500203, "mark conversation read failed")
 		return
 	}
 
-	writeAPISuccess(w, map[string]interface{}{
+	writeSuccess(w, map[string]interface{}{
 		"conversation_id":    conv.ConversationID,
 		"chat_id":            conv.ChatID,
 		"last_read_sequence": conv.LastReadSeq,
@@ -219,13 +219,13 @@ func (h *ConversationHandler) ReadConversation(w http.ResponseWriter, r *http.Re
 func (h *ConversationHandler) UpdateConversationSettings(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.GetUserID(r.Context())
 	if uid == "" {
-		writeAPIError(w, http.StatusUnauthorized, 401001, "unauthorized")
+		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
 		return
 	}
 
 	conversationID := r.PathValue("id")
 	if conversationID == "" {
-		writeAPIError(w, http.StatusBadRequest, 400008, "conversation_id is required")
+		writeError(w, http.StatusBadRequest, 400008, "conversation_id is required")
 		return
 	}
 
@@ -234,25 +234,25 @@ func (h *ConversationHandler) UpdateConversationSettings(w http.ResponseWriter, 
 		Muted  *bool `json:"muted"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, 400001, "invalid request")
+		writeError(w, http.StatusBadRequest, 400001, "invalid request")
 		return
 	}
 	if req.Pinned == nil && req.Muted == nil {
-		writeAPIError(w, http.StatusBadRequest, 400013, "settings is empty")
+		writeError(w, http.StatusBadRequest, 400013, "settings is empty")
 		return
 	}
 
 	conv, err := h.convSvc.UpdateSettings(r.Context(), uid, conversationID, req.Pinned, req.Muted)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			writeAPIError(w, http.StatusNotFound, 404001, "conversation not found")
+			writeError(w, http.StatusNotFound, 404001, "conversation not found")
 			return
 		}
-		writeAPIError(w, http.StatusInternalServerError, 500204, "update conversation settings failed")
+		writeError(w, http.StatusInternalServerError, 500204, "update conversation settings failed")
 		return
 	}
 
-	writeAPISuccess(w, h.conversationDTO(r.Context(), conv, uid))
+	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
 type conversationDTO struct {

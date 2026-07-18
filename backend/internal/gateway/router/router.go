@@ -18,7 +18,7 @@ func NewRouter(
 	uploadHandler *handler.UploadHandler,
 	mediaStaticHandler http.Handler,
 	userHandler *handler.UserHandler,
-	sdkHandler *handler.SDKHandler,
+	userSyncHandler *handler.UserSyncHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -37,8 +37,8 @@ func NewRouter(
 		mux.Handle("/media/", mediaStaticHandler)
 	}
 
-	// 业务 SDK 路由（API Key 鉴权，在 handler 内完成）
-	mux.HandleFunc("PUT /api/v1/sdk/users/{id}", sdkHandler.PutUserSnapshot)
+	// 管理面路由（API Key 鉴权，在 handler 内完成）
+	mux.HandleFunc("PUT /api/v1/management/users/{userID}", userSyncHandler.PutUserSnapshot)
 
 	// ---- 受保护的路由（需要 JWT access_token）----
 	protected := http.NewServeMux()
