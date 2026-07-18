@@ -25,6 +25,15 @@ type Conversation struct {
 	ChatType       string `json:"chat_type"`
 }
 
+// Chat 是可直接承载消息的会话实体。
+type Chat struct {
+	ChatID      string   `json:"chat_id"`
+	ChatType    string   `json:"chat_type"`
+	MemberIDs   []string `json:"member_user_ids"`
+	MemberCount int      `json:"member_count"`
+	CreatedAt   string   `json:"created_at"`
+}
+
 // SendMessageReq 发送消息请求。
 type SendMessageReq struct {
 	ChatID          string      `json:"chat_id"`

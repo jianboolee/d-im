@@ -85,7 +85,7 @@ func main() {
 	convRepo := conversationRepo.NewConversationRepo(db)
 	convProjector := conversationProjector.NewConversationProjector(convRepo)
 	chatR := chatRepo.NewChatRepo(db)
-	chatService := chatSvc.NewChatService(chatR)
+	chatService := chatSvc.NewChatService(chatR, convProjector)
 	gRepo := groupRepo.NewGroupRepo(db)
 	mRepo := groupRepo.NewMemberRepo(db)
 	uRepo := userRepo.NewUserRepo(db)
@@ -102,7 +102,7 @@ func main() {
 	}
 	uploadSvc := mediaSvc.NewUploadService(store, cfg.Storage.MaxImageSize)
 
-	conversationSvc := convSvc.NewConversationService(convRepo, convProjector, chatService)
+	conversationSvc := convSvc.NewConversationService(convRepo, chatService)
 
 	// === message dispatcher（原 message 服务）===
 	d := dispatcher.NewDispatcher(msgRepo, 4)
@@ -130,6 +130,7 @@ func main() {
 
 	authHandler := handler.NewAuthHandler(jwtMgr, cfg.App.FrontendURL, cfg.Auth.SuperPassword)
 	messageHandler := handler.NewMessageHandler(msgSvc, conversationSvc, uRepo, natsPub)
+	chatHandler := handler.NewChatHandler(chatService)
 	convHandler := handler.NewConversationHandler(conversationSvc, chatR, groupService, uRepo)
 	eventPub := groupSvc.NewEventPublisher(groupAdapter.NewCompositeEventAdapter(natsPub))
 	eventPub.SetUserProfileReader(uRepo)
@@ -148,7 +149,7 @@ func main() {
 	uploadHandler := handler.NewUploadHandler(uploadSvc)
 	userHandler := handler.NewUserHandler(uRepo)
 	userSyncHandler := handler.NewUserSyncHandler(jwtMgr, uRepo)
-	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, convHandler, groupHandler, uploadHandler, mediaStaticHandler, userHandler, userSyncHandler)
+	httpHandler := router.NewRouter(jwtMgr, authHandler, messageHandler, chatHandler, convHandler, groupHandler, uploadHandler, mediaStaticHandler, userHandler, userSyncHandler)
 
 	server := gateway.NewServer(gateway.Config{
 		HTTPPort: itoa(cfg.Server.Gateway.HTTPPort),

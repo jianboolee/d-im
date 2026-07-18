@@ -133,40 +133,6 @@ func (h *ConversationHandler) GetConversationByChat(w http.ResponseWriter, r *ht
 	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
 }
 
-// CreateSingleConversation 创建或获取单聊会话
-// POST /api/v1/conversations/single
-func (h *ConversationHandler) CreateSingleConversation(w http.ResponseWriter, r *http.Request) {
-	uid := middleware.GetUserID(r.Context())
-	if uid == "" {
-		writeError(w, http.StatusUnauthorized, 401001, "unauthorized")
-		return
-	}
-
-	var req struct {
-		PeerUserID string `json:"peer_user_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, 400001, "invalid request")
-		return
-	}
-	if req.PeerUserID == "" {
-		writeError(w, http.StatusBadRequest, 400006, "peer_user_id is required")
-		return
-	}
-	if req.PeerUserID == uid {
-		writeError(w, http.StatusBadRequest, 400007, "cannot create single conversation with self")
-		return
-	}
-
-	conv, err := h.convSvc.CreateOrGetSingle(r.Context(), uid, req.PeerUserID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, 500201, "create conversation failed")
-		return
-	}
-
-	writeSuccess(w, h.conversationDTO(r.Context(), conv, uid))
-}
-
 // ReadConversation 标记已读
 // POST /api/v1/conversations/{id}/read
 func (h *ConversationHandler) ReadConversation(w http.ResponseWriter, r *http.Request) {

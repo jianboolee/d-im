@@ -14,14 +14,20 @@ type Repository interface {
 	FindByChatID(ctx context.Context, chatID string) (*model.Chat, error)
 }
 
-// ChatService 管理可承载消息的 Chat 实体生命周期。
-type ChatService struct {
-	repository Repository
-	now        func() time.Time
+// ConversationProjector 接收 Chat 生命周期事实并生成用户级会话视图。
+type ConversationProjector interface {
+	EnsureUsers(ctx context.Context, userIDs []string, chat *model.Chat) error
 }
 
-func NewChatService(repository Repository) *ChatService {
-	return &ChatService{repository: repository, now: time.Now}
+// ChatService 管理可承载消息的 Chat 实体生命周期。
+type ChatService struct {
+	repository    Repository
+	conversations ConversationProjector
+	now           func() time.Time
+}
+
+func NewChatService(repository Repository, conversations ConversationProjector) *ChatService {
+	return &ChatService{repository: repository, conversations: conversations, now: time.Now}
 }
 
 // EnsureSingleChat 原子地创建或返回两个用户的单聊 Chat。
@@ -30,7 +36,16 @@ func (s *ChatService) EnsureSingleChat(ctx context.Context, userID, peerUserID s
 	if err != nil {
 		return nil, err
 	}
-	return s.repository.InsertOrGetSingle(ctx, candidate)
+	chat, err := s.repository.InsertOrGetSingle(ctx, candidate)
+	if err != nil {
+		return nil, err
+	}
+	if s.conversations != nil {
+		if err := s.conversations.EnsureUsers(ctx, chat.Members, chat); err != nil {
+			return nil, err
+		}
+	}
+	return chat, nil
 }
 
 // CreateGroupChat 创建用于承载群消息的 Chat。群资料和成员规则由 GroupService 管理。

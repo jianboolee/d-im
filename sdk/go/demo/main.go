@@ -64,13 +64,13 @@ func main() {
 			log.Printf("  ❌ %s→%s: 获取 session 失败: %v", t.from, t.to, sessionErr)
 			continue
 		}
-		conversation, conversationErr := client.CreateSingleConversation(ctx, senderSession.AccessToken, t.to)
-		if conversationErr != nil {
-			log.Printf("  ❌ %s→%s: 创建会话失败: %v", t.from, t.to, conversationErr)
+		chat, chatErr := client.EnsureSingleChat(ctx, senderSession.AccessToken, t.to)
+		if chatErr != nil {
+			log.Printf("  ❌ %s→%s: 创建 Chat 失败: %v", t.from, t.to, chatErr)
 			continue
 		}
 		_, err := client.SendMessage(ctx, senderSession.AccessToken, dimsdk.SendMessageReq{
-			ChatID:      conversation.ChatID,
+			ChatID:      chat.ChatID,
 			MessageType: "text",
 			Content:     map[string]string{"text": t.text},
 		})
@@ -83,12 +83,12 @@ func main() {
 
 	// 5. 发送卡片消息
 	fmt.Println("\n=== 5. 发送卡片消息 ===")
-	conversation, err := client.CreateSingleConversation(ctx, session.AccessToken, "user_a")
+	chat, err := client.EnsureSingleChat(ctx, session.AccessToken, "user_a")
 	if err != nil {
 		log.Fatalf("  ❌ 创建客服会话失败: %v", err)
 	}
 	_, err = client.SendMessage(ctx, session.AccessToken, dimsdk.SendMessageReq{
-		ChatID:      conversation.ChatID,
+		ChatID:      chat.ChatID,
 		MessageType: "card",
 		Content:     map[string]string{"title": "夏季新款连衣裙", "description": "限时优惠 ¥299", "image_url": "https://oss.21rv.com/uploads/product/1.jpg", "action_url": "https://shop.example.com/item/123"},
 	})
@@ -101,7 +101,7 @@ func main() {
 	// 6. 发送链接消息
 	fmt.Println("\n=== 6. 发送链接消息 ===")
 	_, err = client.SendMessage(ctx, session.AccessToken, dimsdk.SendMessageReq{
-		ChatID:      conversation.ChatID,
+		ChatID:      chat.ChatID,
 		MessageType: "link",
 		Content:     map[string]string{"url": "https://example.com/promo", "title": "全场满200减30", "description": "618 年中大促，全场商品参与活动"},
 	})

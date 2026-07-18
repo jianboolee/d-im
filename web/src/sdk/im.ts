@@ -208,6 +208,14 @@ export enum MessageType {
     last_activity: string;
   }
 
+  export interface Chat {
+	chat_id: string;
+	chat_type: string;
+	member_user_ids: string[];
+	member_count: number;
+	created_at: string;
+  }
+
   export interface ConversationPage {
     items: Conversation[];
     next_cursor?: string;
@@ -792,18 +800,16 @@ export enum MessageType {
       return normalizeConversation(data);
     }
 
-    async activateConversation(peerUserId: string): Promise<Conversation> {
-      const data = await apiRequest<Record<string, unknown>>(
+    async ensureSingleChat(peerUserId: string): Promise<Chat> {
+	  return apiRequest<Chat>(
         this.baseURL,
-        '/api/v1/conversations/single',
+		'/api/v1/chats/single',
         this.token,
         {
           method: 'POST',
           body: JSON.stringify({ peer_user_id: peerUserId }),
         },
       );
-
-      return normalizeConversation(data);
     }
 
     async createGroup(req: GroupCreateRequest): Promise<GroupDetailResponse> {

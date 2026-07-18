@@ -13,6 +13,7 @@ func NewRouter(
 	jwtMgr *crypto.JWTManager,
 	authHandler *handler.AuthHandler,
 	messageHandler *handler.MessageHandler,
+	chatHandler *handler.ChatHandler,
 	convHandler *handler.ConversationHandler,
 	groupHandler *handler.GroupHandler,
 	uploadHandler *handler.UploadHandler,
@@ -47,7 +48,7 @@ func NewRouter(
 	protected.HandleFunc("POST /api/v1/message/forward", messageHandler.ForwardMessage)
 	protected.HandleFunc("GET /api/v1/message/list", messageHandler.ListMessages)
 	protected.HandleFunc("GET /api/v1/conversations", convHandler.ListConversations)
-	protected.HandleFunc("POST /api/v1/conversations/single", convHandler.CreateSingleConversation)
+	protected.HandleFunc("POST /api/v1/chats/single", chatHandler.EnsureSingleChat)
 	protected.HandleFunc("GET /api/v1/conversations/{id}", convHandler.GetConversation)
 	protected.HandleFunc("POST /api/v1/conversations/{id}/read", convHandler.ReadConversation)
 	protected.HandleFunc("PATCH /api/v1/conversations/{id}/settings", convHandler.UpdateConversationSettings)
@@ -85,6 +86,7 @@ func NewRouter(
 	mux.Handle("/api/v1/messages", protectedHandler)
 	mux.Handle("/api/v1/conversations", protectedHandler)
 	mux.Handle("/api/v1/conversations/", protectedHandler)
+	mux.Handle("/api/v1/chats", protectedHandler)
 	mux.Handle("/api/v1/chats/", protectedHandler)
 	mux.Handle("/api/v1/groups", protectedHandler)
 	mux.Handle("/api/v1/groups/", protectedHandler)

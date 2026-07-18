@@ -570,7 +570,8 @@ const createSingleConversation = async () => {
   newConversationError.value = ''
 
   try {
-    const nextConversation = await sdk.activateConversation(peerUserId)
+	const chat = await sdk.ensureSingleChat(peerUserId)
+	const nextConversation = await sdk.getConversationByChatId(chat.chat_id)
     upsertConversation(nextConversation)
     showNewConversationModal.value = false
     newConversationUserId.value = ''

@@ -698,14 +698,14 @@ Authorization: Bearer <access_token>
 
 不提供批量获取用户详情接口。需要用户信息的会话和消息接口应尽量携带必要用户快照，减少 web 额外请求。
 
-## 单聊会话接口
+## 单聊 Chat 接口
 
-### 创建或获取单聊会话
+### 创建或获取单聊 Chat
 
-首次单聊按正确后端架构实现：web 不拼接底层 `chat_id`，只提交对方用户 ID，由后端幂等创建或获取单聊会话，返回 `ConversationDTO`。
+web 不生成 `chat_id`，只提交对方用户 ID，由后端幂等创建或获取单聊 Chat。接口返回 Chat 实体；用户级展示信息通过 `GET /api/v1/chats/{id}/conversation` 获取。
 
 ```http
-POST /api/v1/conversations/single
+POST /api/v1/chats/single
 Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
@@ -724,27 +724,11 @@ Content-Type: application/json
 {
   "code": 0,
   "data": {
-    "id": "conv_001",
-    "conversation_id": "conv_001",
     "chat_id": "chat_001",
     "chat_type": "single",
-    "title": "Bob",
-    "avatar": "",
-    "participants": ["u_001", "u_002"],
-    "peer_user": {
-      "id": "u_002",
-      "nickname": "Bob",
-      "avatar": "",
-      "status": "active"
-    },
-    "group": null,
-    "last_message": null,
-    "last_read_sequence": 0,
-    "muted": false,
-    "pinned": false,
-    "created_at": "2026-07-05T12:00:00Z",
-    "updated_at": "2026-07-05T12:00:00Z",
-    "last_activity_at": "2026-07-05T12:00:00Z"
+	"member_user_ids": ["u_001", "u_002"],
+	"member_count": 2,
+	"created_at": "2026-07-05T12:00:00Z"
   },
   "error": ""
 }
@@ -1375,19 +1359,19 @@ Connector 推送消息：
 - web 侧能显示当前用户昵称和头像。
 - 会话或消息缺少用户快照时，可以按单用户接口补齐。
 
-### 4. 单聊会话创建或获取
+### 4. 单聊 Chat 创建或获取
 
-目标：web 给一个 `peer_user_id`，后端返回稳定单聊 ConversationDTO。
+目标：web 给一个 `peer_user_id`，后端返回稳定单聊 Chat。
 
 任务：
 
-- 实现 `POST /api/v1/conversations/single`。
+- 实现 `POST /api/v1/chats/single`。
 - 后端内部幂等生成或获取单聊实体。
-- 返回会话详情结构。
+- 返回 Chat 结构；Conversation 通过 chat ID 单独查询。
 
 验收：
 
-- 同一对用户多次调用返回同一个 `conversation_id`。
+- 同一对用户多次调用返回同一个 `chat_id`。
 - 当前用户和对方用户都拥有对应会话视图。
 
 ### 5. 会话详情

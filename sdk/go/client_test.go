@@ -21,13 +21,13 @@ func TestClientUsesExpectedAuthentication(t *testing.T) {
 				t.Fatalf("X-API-Key = %q, want test-key", got)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": 0, "data": map[string]interface{}{"user_id": "user-a", "version": 1}})
-		case "/api/v1/conversations/single":
+		case "/api/v1/chats/single":
 			if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
 				t.Fatalf("Authorization = %q, want Bearer access-token", got)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"code": 0,
-				"data": Conversation{ConversationID: "conversation-1", ChatID: "chat-1", ChatType: "single"},
+				"data": Chat{ChatID: "chat-1", ChatType: "single"},
 			})
 		default:
 			http.NotFound(w, r)
@@ -40,12 +40,12 @@ func TestClientUsesExpectedAuthentication(t *testing.T) {
 		t.Fatalf("UpsertUser() error = %v", err)
 	}
 
-	conversation, err := client.CreateSingleConversation(context.Background(), "access-token", "user-b")
+	chat, err := client.EnsureSingleChat(context.Background(), "access-token", "user-b")
 	if err != nil {
-		t.Fatalf("CreateSingleConversation() error = %v", err)
+		t.Fatalf("EnsureSingleChat() error = %v", err)
 	}
-	if conversation.ChatID != "chat-1" {
-		t.Fatalf("ChatID = %q, want chat-1", conversation.ChatID)
+	if chat.ChatID != "chat-1" {
+		t.Fatalf("ChatID = %q, want chat-1", chat.ChatID)
 	}
 }
 

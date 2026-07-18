@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	chatSvc "d-im/internal/chat/service"
-	"d-im/internal/conversation/projector"
 	conversationRepo "d-im/internal/conversation/repository"
 	"d-im/pkg/model"
 
@@ -14,14 +13,13 @@ import (
 
 // ConversationService 会话服务
 type ConversationService struct {
-	repo      *conversationRepo.ConversationRepo
-	projector *projector.ConversationProjector
-	chats     *chatSvc.ChatService
+	repo  *conversationRepo.ConversationRepo
+	chats *chatSvc.ChatService
 }
 
 // NewConversationService 创建会话服务
-func NewConversationService(repo *conversationRepo.ConversationRepo, conversations *projector.ConversationProjector, chats *chatSvc.ChatService) *ConversationService {
-	return &ConversationService{repo: repo, projector: conversations, chats: chats}
+func NewConversationService(repo *conversationRepo.ConversationRepo, chats *chatSvc.ChatService) *ConversationService {
+	return &ConversationService{repo: repo, chats: chats}
 }
 
 // GetList 获取用户会话列表
@@ -42,22 +40,6 @@ func (s *ConversationService) GetConversation(ctx context.Context, uid, conversa
 // GetConversationByChatID 获取当前用户在指定 chat 下的会话视图。
 func (s *ConversationService) GetConversationByChatID(ctx context.Context, uid, chatID string) (*model.Conversation, error) {
 	return s.repo.FindByUIDAndChatID(ctx, uid, chatID)
-}
-
-// CreateOrGetSingle 创建或获取单聊会话，并确保双方会话视图存在
-func (s *ConversationService) CreateOrGetSingle(ctx context.Context, uid, peerUserID string) (*model.Conversation, error) {
-	chat, err := s.chats.EnsureSingleChat(ctx, uid, peerUserID)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, memberID := range chat.Members {
-		if err := s.projector.UserJoined(ctx, memberID, chat.ChatID, chat.ChatType, 0); err != nil {
-			return nil, err
-		}
-	}
-
-	return s.repo.FindByUIDAndChatID(ctx, uid, chat.ChatID)
 }
 
 // SetTop 设置置顶。

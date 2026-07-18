@@ -6,25 +6,25 @@ import (
 	"fmt"
 )
 
-// CreateSingleConversation 创建或获取当前用户与指定用户的单聊会话。
-func (c *Client) CreateSingleConversation(ctx context.Context, accessToken, peerUserID string) (*Conversation, error) {
-	respBody, err := c.doWithToken(ctx, "POST", "/api/v1/conversations/single", map[string]string{
+// EnsureSingleChat 创建或获取当前用户与指定用户的单聊 Chat。
+func (c *Client) EnsureSingleChat(ctx context.Context, accessToken, peerUserID string) (*Chat, error) {
+	respBody, err := c.doWithToken(ctx, "POST", "/api/v1/chats/single", map[string]string{
 		"peer_user_id": peerUserID,
 	}, accessToken)
 	if err != nil {
-		return nil, fmt.Errorf("create single conversation: %w", err)
+		return nil, fmt.Errorf("ensure single chat: %w", err)
 	}
 
 	var resp struct {
 		Code  int          `json:"code"`
-		Data  Conversation `json:"data"`
+		Data  Chat   `json:"data"`
 		Error string       `json:"error"`
 	}
 	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal conversation: %w", err)
+		return nil, fmt.Errorf("unmarshal chat: %w", err)
 	}
 	if resp.Code != 0 {
-		return nil, fmt.Errorf("create single conversation: %s", resp.Error)
+		return nil, fmt.Errorf("ensure single chat: %s", resp.Error)
 	}
 	return &resp.Data, nil
 }
